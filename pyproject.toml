@@ -1,0 +1,20 @@
+[project]
+name = "recbot2"
+version = "0.1.0"
+description = "Check recreation.gov campsite availability and post to Discord"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+recbot2 = "recbot2.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
