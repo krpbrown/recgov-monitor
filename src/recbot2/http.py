@@ -8,12 +8,16 @@ from urllib.error import HTTPError
 class HttpClient:
     def __init__(self, timeout_seconds: int = 15) -> None:
         self.timeout_seconds = timeout_seconds
+        self.default_headers = {
+            "User-Agent": "recbot2/1.0",
+            "Accept": "application/json",
+        }
 
     def get_json(self, url: str, params: dict[str, str] | None = None) -> dict:
         if params:
             url = f"{url}?{parse.urlencode(params)}"
 
-        req = request.Request(url, method="GET")
+        req = request.Request(url, method="GET", headers=self.default_headers)
         try:
             with request.urlopen(req, timeout=self.timeout_seconds) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -27,7 +31,10 @@ class HttpClient:
             url,
             data=data,
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers={
+                **self.default_headers,
+                "Content-Type": "application/json",
+            },
         )
         try:
             with request.urlopen(req, timeout=self.timeout_seconds):

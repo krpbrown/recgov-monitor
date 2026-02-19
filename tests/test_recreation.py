@@ -1,6 +1,6 @@
 from datetime import date
 
-from recbot2.recreation import find_available_campsites
+from recbot2.recreation import extract_campground_name, find_available_campsites
 
 
 def test_find_available_campsites_filters_requested_days_and_status() -> None:
@@ -26,3 +26,12 @@ def test_find_available_campsites_filters_requested_days_and_status() -> None:
 
     assert len(matches) == 2
     assert {m.campsite_name for m in matches} == {"A1", "A2"}
+
+
+def test_extract_campground_name_uses_payload_name_fields() -> None:
+    payload = {"facility_name": "Simpson Springs Campground"}
+    assert extract_campground_name(payload, "campground 256892") == "Simpson Springs Campground"
+
+
+def test_extract_campground_name_falls_back_when_missing() -> None:
+    assert extract_campground_name({}, "campground 256892") == "campground 256892"

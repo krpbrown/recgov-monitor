@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/recbot2/__init__.py
+src/recbot2/__main__.py
+src/recbot2/cli.py
+src/recbot2/http.py
+src/recbot2/models.py
+src/recbot2/notifier.py
+src/recbot2/recreation.py
+src/recbot2.egg-info/PKG-INFO
+src/recbot2.egg-info/SOURCES.txt
+src/recbot2.egg-info/dependency_links.txt
+src/recbot2.egg-info/entry_points.txt
+src/recbot2.egg-info/top_level.txt
+tests/test_cli.py
+tests/test_notifier.py
+tests/test_recreation.py

@@ -23,6 +23,24 @@ class RecreationGovClient:
         return self.client.get_json(url, params=params)
 
 
+def extract_campground_name(payload: dict, fallback: str) -> str:
+    """Best-effort campground name extraction from recreation.gov payload."""
+
+    for key in ("campground_name", "facility_name", "name"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    campground = payload.get("campground")
+    if isinstance(campground, dict):
+        for key in ("name", "facility_name", "campground_name"):
+            value = campground.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+    return fallback
+
+
 def find_available_campsites(payload: dict, requested_dates: set[date]) -> list[AvailabilityMatch]:
     """Extract all campsites that are available on requested dates."""
 

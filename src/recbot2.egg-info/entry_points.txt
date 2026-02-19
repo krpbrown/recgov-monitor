@@ -1,0 +1,2 @@
+[console_scripts]
+recbot2 = recbot2.cli:main

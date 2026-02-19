@@ -15,7 +15,11 @@ from recbot2.notifier import (
     explain_webhook_error,
     validate_discord_webhook_url,
 )
-from recbot2.recreation import RecreationGovClient, find_available_campsites
+from recbot2.recreation import (
+    RecreationGovClient,
+    extract_campground_name,
+    find_available_campsites,
+)
 
 
 @dataclass(frozen=True)
@@ -57,25 +61,32 @@ def _load_structured_file(path: Path) -> dict[str, Any]:
     if suffix == ".json":
         return json.loads(text)
 
-    if suffix in {".yaml", ".yml"}:
-        try:
-            import yaml  # type: ignore
-        except ImportError as exc:
-            raise ValueError(
-                "YAML config requires PyYAML. Install with: pip install pyyaml"
-            ) from exc
-        data = yaml.safe_load(text)
-        if not isinstance(data, dict):
-            raise ValueError("Config root must be a mapping/object.")
-        return data
-
-    raise ValueError("Config file must end in .json, .yaml, or .yml")
+    raise ValueError("Config file must end in .json")
 
 
-def load_monitor_requests(config_path: str) -> tuple[str | None, list[MonitorRequest]]:
+def load_monitor_requests(
+    config_path: str,
+) -> tuple[str | None, int | None, dict[str, str], list[MonitorRequest]]:
     raw = _load_structured_file(Path(config_path))
 
     webhook = raw.get("discord_webhook_url")
+    poll_seconds_raw = raw.get("poll_seconds")
+    poll_seconds: int | None = None
+    if poll_seconds_raw is not None:
+        if not isinstance(poll_seconds_raw, int) or poll_seconds_raw < 0:
+            raise ValueError("'poll_seconds' must be a non-negative integer.")
+        poll_seconds = poll_seconds_raw
+
+    campground_names_raw = raw.get("campground_names", {})
+    campground_names: dict[str, str] = {}
+    if campground_names_raw is not None:
+        if not isinstance(campground_names_raw, dict):
+            raise ValueError("'campground_names' must be an object mapping id to name.")
+        for key, value in campground_names_raw.items():
+            if not isinstance(key, (str, int)) or not isinstance(value, str) or not value.strip():
+                raise ValueError("'campground_names' must map campground ids to non-empty names.")
+            campground_names[str(key)] = value.strip()
+
     monitors = raw.get("monitors")
     if not isinstance(monitors, list) or not monitors:
         raise ValueError("Config must include a non-empty 'monitors' list.")
@@ -104,7 +115,7 @@ def load_monitor_requests(config_path: str) -> tuple[str | None, list[MonitorReq
             )
         )
 
-    return webhook if isinstance(webhook, str) else None, requests
+    return webhook if isinstance(webhook, str) else None, poll_seconds, campground_names, requests
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--config",
-        help="Path to JSON or YAML config defining monitor targets.",
+        help="Path to JSON config defining monitor targets.",
     )
     parser.add_argument(
         "--campground-ids",
@@ -129,8 +140,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--poll-seconds",
         type=int,
-        default=60,
-        help="Polling interval in seconds. Defaults to 60.",
+        default=None,
+        help="Polling interval in seconds. Defaults to config poll_seconds or 60.",
     )
     parser.add_argument(
         "--request-delay-seconds",
@@ -149,6 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_once(
     monitors: list[MonitorRequest],
+    campground_names: dict[str, str],
     discord_webhook_url: str,
     request_delay_seconds: float,
 ) -> int:
@@ -160,8 +172,10 @@ def run_once(
         months = sorted({date(d.year, d.month, 1) for d in monitor.requested_dates})
         for campground_id in monitor.campground_ids:
             all_matches = []
+            campground_name = campground_names.get(campground_id, f"campground {campground_id}")
             for month in months:
                 payload = client.fetch_month(campground_id, month)
+                campground_name = extract_campground_name(payload, campground_name)
                 all_matches.extend(
                     find_available_campsites(payload, monitor.requested_dates)
                 )
@@ -175,7 +189,7 @@ def run_once(
                     f"{campground_id}. Sending Discord alert..."
                 )
                 try:
-                    notifier.notify(campground_id, all_matches)
+                    notifier.notify(campground_id, campground_name, all_matches)
                 except RuntimeError as exc:
                     print(
                         f"Discord webhook error for campground {campground_id}: "
@@ -194,9 +208,18 @@ def main() -> None:
 
     monitors: list[MonitorRequest]
     config_webhook: str | None = None
+    config_poll_seconds: int | None = None
+    config_campground_names: dict[str, str] = {}
     if args.config:
         try:
-            config_webhook, monitors = load_monitor_requests(args.config)
+            (
+                config_webhook,
+                config_poll_seconds,
+                config_campground_names,
+                monitors,
+            ) = load_monitor_requests(
+                args.config
+            )
         except ValueError as exc:
             parser.error(str(exc))
     else:
@@ -223,23 +246,34 @@ def main() -> None:
     except ValueError as exc:
         parser.error(str(exc))
 
+    poll_seconds = (
+        args.poll_seconds
+        if args.poll_seconds is not None
+        else (config_poll_seconds if config_poll_seconds is not None else 60)
+    )
+
     while True:
-        sleep_seconds = args.poll_seconds
+        sleep_seconds = poll_seconds
         try:
-            exit_code = run_once(monitors, webhook_url, args.request_delay_seconds)
-            if args.poll_seconds <= 0:
+            exit_code = run_once(
+                monitors,
+                config_campground_names,
+                webhook_url,
+                args.request_delay_seconds,
+            )
+            if poll_seconds <= 0:
                 raise SystemExit(exit_code)
         except Exception as exc:  # noqa: BLE001
             message = str(exc)
             if is_rate_limited_error(message):
-                sleep_seconds = max(args.poll_seconds, args.rate_limit_cooldown_seconds)
+                sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
                 print(
                     "Rate limited by recreation.gov (HTTP 429). "
                     f"Cooling down for {sleep_seconds} seconds before retrying.",
                     file=sys.stderr,
                 )
             print(f"Error while checking availability: {message}", file=sys.stderr)
-            if args.poll_seconds <= 0:
+            if poll_seconds <= 0:
                 raise SystemExit(2) from exc
         time.sleep(sleep_seconds)
 

@@ -37,6 +37,7 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
         json.dumps(
             {
                 "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "poll_seconds": 45,
                 "monitors": [
                     {
                         "campground_ids": [256892],
@@ -54,9 +55,11 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    webhook, monitors = load_monitor_requests(str(config_path))
+    webhook, poll_seconds, campground_names, monitors = load_monitor_requests(str(config_path))
 
     assert webhook == "https://discord.com/api/webhooks/test"
+    assert poll_seconds == 45
+    assert campground_names == {}
     assert len(monitors) == 2
     assert monitors[0].campground_ids == ["256892"]
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
@@ -70,3 +73,49 @@ def test_is_rate_limited_error_detects_429() -> None:
 
 def test_is_rate_limited_error_ignores_other_errors() -> None:
     assert not is_rate_limited_error("HTTP Error 403: Forbidden")
+
+
+def test_load_monitor_requests_rejects_negative_poll_seconds(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "poll_seconds": -1,
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-03-05",
+                        "check_out": "2026-03-07",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="'poll_seconds' must be a non-negative integer."):
+        load_monitor_requests(str(config_path))
+
+
+def test_load_monitor_requests_reads_campground_name_mapping(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "campground_names": {"256892": "Simpson Springs Campground"},
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-03-05",
+                        "check_out": "2026-03-07",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, _, campground_names, _ = load_monitor_requests(str(config_path))
+    assert campground_names == {"256892": "Simpson Springs Campground"}

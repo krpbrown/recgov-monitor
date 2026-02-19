@@ -1,3 +1,10 @@
+Metadata-Version: 2.4
+Name: recbot2
+Version: 0.1.0
+Summary: Check recreation.gov campsite availability and post to Discord
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+
 # recbot2
 
 `recbot2` checks recreation.gov campground availability for date ranges and sends a Discord webhook notification when campsites are available.
@@ -30,9 +37,6 @@ pip install -e .
 {
   "discord_webhook_url": "https://discord.com/api/webhooks/...",
   "poll_seconds": 60,
-  "campground_names": {
-    "256892": "Simpson Springs Campground"
-  },
   "monitors": [
     {
       "campground_ids": [256892],
@@ -49,7 +53,6 @@ pip install -e .
 ```
 
 `poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
-`campground_names` is optional and lets you map campground ids to friendly names when the API payload does not include a name.
 
 Run:
 
@@ -90,17 +93,6 @@ To reduce recreation.gov throttling risk, the CLI also supports:
 - `--rate-limit-cooldown-seconds` (default `300`) cooldown when a 429 is hit
 
 In all modes, `DISCORD_WEBHOOK_URL` can be set as an environment variable instead of passing `--discord-webhook-url`.
-
-## Discord Message Format
-
-When availability is found, notifications include campground name, site, status, date, and a reserve link.
-
-Example:
-
-```text
-Availability found for Simpson Springs Campground 256892
-- Site: 001 | Status: Available | Date: 3/5/2026 | Reserve: <https://www.recreation.gov/camping/campsites/10019342>
-```
 
 ## Notes
 
