@@ -10,7 +10,11 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from recbot2.notifier import DiscordNotifier
+from recbot2.notifier import (
+    DiscordNotifier,
+    explain_webhook_error,
+    validate_discord_webhook_url,
+)
 from recbot2.recreation import RecreationGovClient, find_available_campsites
 
 
@@ -39,6 +43,11 @@ def parse_stay_dates(check_in_raw: str, check_out_raw: str) -> set[date]:
         nights.add(day)
         day += timedelta(days=1)
     return nights
+
+
+def is_rate_limited_error(error_message: str) -> bool:
+    message = error_message.lower()
+    return "429" in message or "too many requests" in message
 
 
 def _load_structured_file(path: Path) -> dict[str, Any]:
@@ -79,7 +88,9 @@ def load_monitor_requests(config_path: str) -> tuple[str | None, list[MonitorReq
         check_in = item.get("check_in")
         check_out = item.get("check_out")
 
-        if not isinstance(campground_ids, list) or not all(isinstance(v, (str, int)) for v in campground_ids):
+        if not isinstance(campground_ids, list) or not all(
+            isinstance(v, (str, int)) for v in campground_ids
+        ):
             raise ValueError("'campground_ids' must be a non-empty list of ids.")
         if not campground_ids:
             raise ValueError("'campground_ids' must be a non-empty list of ids.")
@@ -121,10 +132,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=60,
         help="Polling interval in seconds. Defaults to 60.",
     )
+    parser.add_argument(
+        "--request-delay-seconds",
+        type=float,
+        default=1.0,
+        help="Delay between recreation.gov API requests. Defaults to 1.0.",
+    )
+    parser.add_argument(
+        "--rate-limit-cooldown-seconds",
+        type=int,
+        default=300,
+        help="Cooldown after HTTP 429 before next cycle. Defaults to 300.",
+    )
     return parser
 
 
-def run_once(monitors: list[MonitorRequest], discord_webhook_url: str) -> int:
+def run_once(
+    monitors: list[MonitorRequest],
+    discord_webhook_url: str,
+    request_delay_seconds: float,
+) -> int:
     client = RecreationGovClient()
     notifier = DiscordNotifier(discord_webhook_url)
     found_any = False
@@ -135,7 +162,11 @@ def run_once(monitors: list[MonitorRequest], discord_webhook_url: str) -> int:
             all_matches = []
             for month in months:
                 payload = client.fetch_month(campground_id, month)
-                all_matches.extend(find_available_campsites(payload, monitor.requested_dates))
+                all_matches.extend(
+                    find_available_campsites(payload, monitor.requested_dates)
+                )
+                if request_delay_seconds > 0:
+                    time.sleep(request_delay_seconds)
 
             if all_matches:
                 found_any = True
@@ -143,7 +174,14 @@ def run_once(monitors: list[MonitorRequest], discord_webhook_url: str) -> int:
                     f"Found {len(all_matches)} available campsite slot(s) for campground "
                     f"{campground_id}. Sending Discord alert..."
                 )
-                notifier.notify(campground_id, all_matches)
+                try:
+                    notifier.notify(campground_id, all_matches)
+                except RuntimeError as exc:
+                    print(
+                        f"Discord webhook error for campground {campground_id}: "
+                        f"{explain_webhook_error(str(exc))}",
+                        file=sys.stderr,
+                    )
             else:
                 print(f"No availability found for campground {campground_id}.")
 
@@ -163,7 +201,9 @@ def main() -> None:
             parser.error(str(exc))
     else:
         if not (args.campground_ids and args.check_in and args.check_out):
-            parser.error("Either --config or all of --campground-ids, --check-in, --check-out are required.")
+            parser.error(
+                "Either --config or all of --campground-ids, --check-in, --check-out are required."
+            )
         try:
             monitors = [
                 MonitorRequest(
@@ -178,16 +218,30 @@ def main() -> None:
     if not webhook_url:
         parser.error("A Discord webhook URL is required (CLI arg, env var, or config field).")
 
+    try:
+        validate_discord_webhook_url(webhook_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     while True:
+        sleep_seconds = args.poll_seconds
         try:
-            exit_code = run_once(monitors, webhook_url)
+            exit_code = run_once(monitors, webhook_url, args.request_delay_seconds)
             if args.poll_seconds <= 0:
                 raise SystemExit(exit_code)
         except Exception as exc:  # noqa: BLE001
-            print(f"Error while checking availability: {exc}", file=sys.stderr)
+            message = str(exc)
+            if is_rate_limited_error(message):
+                sleep_seconds = max(args.poll_seconds, args.rate_limit_cooldown_seconds)
+                print(
+                    "Rate limited by recreation.gov (HTTP 429). "
+                    f"Cooling down for {sleep_seconds} seconds before retrying.",
+                    file=sys.stderr,
+                )
+            print(f"Error while checking availability: {message}", file=sys.stderr)
             if args.poll_seconds <= 0:
                 raise SystemExit(2) from exc
-        time.sleep(args.poll_seconds)
+        time.sleep(sleep_seconds)
 
 
 if __name__ == "__main__":

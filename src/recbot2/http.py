@@ -14,8 +14,12 @@ class HttpClient:
             url = f"{url}?{parse.urlencode(params)}"
 
         req = request.Request(url, method="GET")
-        with request.urlopen(req, timeout=self.timeout_seconds) as response:
-            return json.loads(response.read().decode("utf-8"))
+        try:
+            with request.urlopen(req, timeout=self.timeout_seconds) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"GET request failed: {exc.code} {body}") from exc
 
     def post_json(self, url: str, payload: dict) -> None:
         data = json.dumps(payload).encode("utf-8")

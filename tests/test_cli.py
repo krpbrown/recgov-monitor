@@ -3,7 +3,12 @@ from datetime import date
 
 import pytest
 
-from recbot2.cli import load_monitor_requests, parse_campground_ids, parse_stay_dates
+from recbot2.cli import (
+    is_rate_limited_error,
+    load_monitor_requests,
+    parse_campground_ids,
+    parse_stay_dates,
+)
 
 
 def test_parse_campground_ids_parses_csv() -> None:
@@ -57,3 +62,11 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
     assert monitors[1].campground_ids == ["251869", "232492"]
     assert monitors[1].requested_dates == {date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)}
+
+
+def test_is_rate_limited_error_detects_429() -> None:
+    assert is_rate_limited_error("HTTP Error 429: Too Many Requests")
+
+
+def test_is_rate_limited_error_ignores_other_errors() -> None:
+    assert not is_rate_limited_error("HTTP Error 403: Forbidden")
