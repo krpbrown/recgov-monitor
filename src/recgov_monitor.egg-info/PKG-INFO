@@ -71,7 +71,7 @@ Before running monitor mode, export campgrounds:
 
 ```bash
 export RIDB_API_KEY=your_key_here
-python scripts/export_ridb_campgrounds.py --output campgrounds.json
+python scripts/export_campgrounds.py --output campgrounds.json
 ```
 
 By default, export now performs live recreation.gov validation and removes clearly invalid campground IDs
@@ -82,7 +82,7 @@ Fast test run example (20 records, force include campground `232492`):
 
 ```bash
 export RIDB_API_KEY=your_key_here
-python scripts/export_ridb_campgrounds.py -S --test-limit 20 --test-include-id 232492 --output campgrounds.json
+python scripts/export_campgrounds.py -S --test-limit 20 --test-include-id 232492 --output campgrounds.json
 ```
 
 To create or update `monitor.json` with a desktop UI:

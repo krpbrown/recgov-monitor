@@ -230,7 +230,7 @@ def run_once(
     return 0 if found_any else 1
 
 
-def main() -> None:
+def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
@@ -278,31 +278,34 @@ def main() -> None:
         else (config_poll_seconds if config_poll_seconds is not None else 60)
     )
 
-    while True:
-        sleep_seconds = poll_seconds
-        try:
-            exit_code = run_once(
-                monitors,
-                campground_names,
-                webhook_url,
-                args.request_delay_seconds,
-            )
-            if poll_seconds <= 0:
-                raise SystemExit(exit_code)
-        except Exception as exc:  # noqa: BLE001
-            message = str(exc)
-            if is_rate_limited_error(message):
-                sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
-                print(
-                    "Rate limited by recreation.gov (HTTP 429). "
-                    f"Cooling down for {sleep_seconds} seconds before retrying.",
-                    file=sys.stderr,
+    try:
+        while True:
+            sleep_seconds = poll_seconds
+            try:
+                exit_code = run_once(
+                    monitors,
+                    campground_names,
+                    webhook_url,
+                    args.request_delay_seconds,
                 )
-            print(f"Error while checking availability: {message}", file=sys.stderr)
-            if poll_seconds <= 0:
-                raise SystemExit(2) from exc
-        time.sleep(sleep_seconds)
-
+                if poll_seconds <= 0:
+                    return exit_code
+            except Exception as exc:  # noqa: BLE001
+                message = str(exc)
+                if is_rate_limited_error(message):
+                    sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
+                    print(
+                        "Rate limited by recreation.gov (HTTP 429). "
+                        f"Cooling down for {sleep_seconds} seconds before retrying.",
+                        file=sys.stderr,
+                    )
+                print(f"Error while checking availability: {message}", file=sys.stderr)
+                if poll_seconds <= 0:
+                    return 2
+            time.sleep(sleep_seconds)
+    except KeyboardInterrupt:
+        print("Monitoring stopped.")
+        return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

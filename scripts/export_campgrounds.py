@@ -110,8 +110,29 @@ def is_campground(record: dict) -> bool:
     )
 
 
+def is_reservable(record: dict) -> bool:
+    value = record.get("Reservable")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    return True
+
+
 def extract_park_name(record: dict) -> str:
     for key in ("RecAreaName", "ParentRecAreaName", "OrganizationName"):
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def extract_state(record: dict) -> str:
+    for key in ("FacilityStateCode", "FacilityState", "StateCode", "AddressStateCode"):
         value = record.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
@@ -186,7 +207,47 @@ def fetch_facility_details(
     return {}
 
 
-def fetch_park_from_recreation_url(url: str, timeout_seconds: int = 20) -> str:
+def extract_location_from_recreation_html(text: str) -> tuple[str, str]:
+    park = ""
+    state = ""
+
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.IGNORECASE | re.DOTALL)
+    if match:
+        title = html.unescape(match.group(1)).strip()
+        title = " ".join(title.split())
+        # Typical shape: "<Campground>, <Park Name> - Recreation.gov"
+        park_match = re.search(
+            r",\s*(.*?)\s*-\s*Recreation\.gov",
+            title,
+            flags=re.IGNORECASE,
+        )
+        if park_match:
+            park_candidate = park_match.group(1).strip()
+            state_match = re.search(r",\s*([A-Z]{2})$", park_candidate)
+            if state_match:
+                state = state_match.group(1)
+                park_candidate = park_candidate[: state_match.start()].strip()
+            if park_candidate and park_candidate.lower() != "recreation.gov":
+                park = park_candidate
+
+    # Recreation.gov page data often includes addressRegion in JSON/JSON-LD.
+    state_match = re.search(
+        r'"addressRegion"\s*:\s*"([^"]+)"',
+        text,
+        flags=re.IGNORECASE,
+    )
+    if state_match:
+        state_candidate = html.unescape(state_match.group(1)).strip()
+        if state_candidate:
+            state = state_candidate
+
+    return park, state
+
+
+def fetch_location_from_recreation_url(
+    url: str,
+    timeout_seconds: int = 20,
+) -> tuple[str, str]:
     req = request.Request(
         url,
         method="GET",
@@ -199,25 +260,54 @@ def fetch_park_from_recreation_url(url: str, timeout_seconds: int = 20) -> str:
         with request.urlopen(req, timeout=timeout_seconds) as response:
             text = response.read().decode("utf-8", errors="ignore")
     except (HTTPError, URLError):
-        return ""
+        return "", ""
 
-    match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.IGNORECASE | re.DOTALL)
-    if not match:
-        return ""
+    return extract_location_from_recreation_html(text)
 
-    title = html.unescape(match.group(1)).strip()
-    title = " ".join(title.split())
-    # Typical shape: "<Campground>, <Park Name> - Recreation.gov"
-    park_match = re.search(
-        r",\s*(.*?)\s*-\s*Recreation\.gov",
-        title,
-        flags=re.IGNORECASE,
+
+def fetch_location_from_recreation_search(
+    campground_id: int,
+    timeout_seconds: int = 20,
+) -> tuple[str, str]:
+    query = parse.urlencode({"fq": f"entity_id:{campground_id}"})
+    url = f"https://www.recreation.gov/api/search?{query}"
+    req = request.Request(
+        url,
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "recgov-monitor-ridb-export/1.0",
+        },
     )
-    if park_match:
-        park = park_match.group(1).strip()
-        if park and park.lower() != "recreation.gov":
-            return park
-    return ""
+    try:
+        with request.urlopen(req, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, json.JSONDecodeError):
+        return "", ""
+
+    if not isinstance(payload, dict):
+        return "", ""
+    results = payload.get("results")
+    if not isinstance(results, list) or not results:
+        return "", ""
+
+    record = results[0]
+    if not isinstance(record, dict):
+        return "", ""
+
+    park = ""
+    state = ""
+    parent_name = record.get("parent_name")
+    if isinstance(parent_name, str) and parent_name.strip():
+        park = parent_name.strip()
+
+    for key in ("state", "state_code"):
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            state = value.strip()
+            break
+
+    return park, state
 
 
 def fetch_all_campgrounds(
@@ -231,7 +321,8 @@ def fetch_all_campgrounds(
     campgrounds_by_id: dict[str, dict[str, object]] = {}
     rec_area_cache: dict[int, str] = {}
     facility_cache: dict[int, dict] = {}
-    page_park_cache: dict[str, str] = {}
+    page_location_cache: dict[str, tuple[str, str]] = {}
+    search_location_cache: dict[int, tuple[str, str]] = {}
     required_ids = include_ids or set()
 
     while True:
@@ -246,7 +337,7 @@ def fetch_all_campgrounds(
             raise RuntimeError("Unexpected RIDB response: RECDATA was not a list.")
 
         for record in records:
-            if not isinstance(record, dict) or not is_campground(record):
+            if not isinstance(record, dict) or not is_campground(record) or not is_reservable(record):
                 continue
 
             facility_id = record.get("FacilityID")
@@ -266,6 +357,7 @@ def fetch_all_campgrounds(
             ):
                 continue
             park = ""
+            state = extract_state(record)
             rec_area_id_raw = record.get("RecAreaID")
             rec_area_id_int: int | None = None
             if rec_area_id_raw is not None:
@@ -308,20 +400,33 @@ def fetch_all_campgrounds(
                 "id": facility_id_int,
                 "url": f"https://www.recreation.gov/camping/campgrounds/{facility_id_int}",
                 "park": park,
+                "state": state,
             }
 
-            if (
-                not park
-                and campgrounds_by_id[facility_id_str]["url"]
-            ):
+            if campgrounds_by_id[facility_id_str]["url"] and (not park or not state):
                 campground_url = str(campgrounds_by_id[facility_id_str]["url"])
-                if campground_url in page_park_cache:
-                    park = page_park_cache[campground_url]
+                if campground_url in page_location_cache:
+                    page_park, page_state = page_location_cache[campground_url]
                 else:
-                    park = fetch_park_from_recreation_url(campground_url)
-                    page_park_cache[campground_url] = park
-                if park:
-                    campgrounds_by_id[facility_id_str]["park"] = park
+                    page_park, page_state = fetch_location_from_recreation_url(campground_url)
+                    page_location_cache[campground_url] = (page_park, page_state)
+                if page_park and not park:
+                    park = page_park
+                    campgrounds_by_id[facility_id_str]["park"] = page_park
+                if page_state and not state:
+                    state = page_state
+                    campgrounds_by_id[facility_id_str]["state"] = page_state
+
+            if not park or not state:
+                if facility_id_int in search_location_cache:
+                    search_park, search_state = search_location_cache[facility_id_int]
+                else:
+                    search_park, search_state = fetch_location_from_recreation_search(facility_id_int)
+                    search_location_cache[facility_id_int] = (search_park, search_state)
+                if search_park and not park:
+                    campgrounds_by_id[facility_id_str]["park"] = search_park
+                if search_state and not state:
+                    campgrounds_by_id[facility_id_str]["state"] = search_state
 
         metadata = payload.get("METADATA", {})
         results = metadata.get("RESULTS", {}) if isinstance(metadata, dict) else {}
@@ -374,6 +479,12 @@ def fetch_all_campgrounds(
             if not detail:
                 print(f"[ridb]   could not fetch facility {facility_id_int}", file=sys.stderr)
                 continue
+            if not is_reservable(detail):
+                print(
+                    f"[ridb]   skipping {facility_id_int} (Reservable=false)",
+                    file=sys.stderr,
+                )
+                continue
 
             facility_name_raw = detail.get("FacilityName")
             facility_name = (
@@ -382,6 +493,7 @@ def fetch_all_campgrounds(
                 else f"campground {facility_id_int}"
             )
             park = ""
+            state = extract_state(detail)
 
             rec_area_id_raw = detail.get("RecAreaID")
             rec_area_id_int: int | None = None
@@ -399,18 +511,34 @@ def fetch_all_campgrounds(
             #         rec_area_cache[rec_area_id_int] = park
 
             url = f"https://www.recreation.gov/camping/campgrounds/{facility_id_int}"
-            if not park:
-                if url in page_park_cache:
-                    park = page_park_cache[url]
+            if not park or not state:
+                if url in page_location_cache:
+                    page_park, page_state = page_location_cache[url]
                 else:
-                    park = fetch_park_from_recreation_url(url)
-                    page_park_cache[url] = park
+                    page_park, page_state = fetch_location_from_recreation_url(url)
+                    page_location_cache[url] = (page_park, page_state)
+                if page_park and not park:
+                    park = page_park
+                if page_state and not state:
+                    state = page_state
+
+            if not park or not state:
+                if facility_id_int in search_location_cache:
+                    search_park, search_state = search_location_cache[facility_id_int]
+                else:
+                    search_park, search_state = fetch_location_from_recreation_search(facility_id_int)
+                    search_location_cache[facility_id_int] = (search_park, search_state)
+                if search_park and not park:
+                    park = search_park
+                if search_state and not state:
+                    state = search_state
 
             campgrounds_by_id[str(facility_id_int)] = {
                 "name": facility_name,
                 "id": facility_id_int,
                 "url": url,
                 "park": park,
+                "state": state,
             }
 
     sorted_campgrounds = sorted(

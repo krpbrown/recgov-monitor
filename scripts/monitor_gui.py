@@ -86,6 +86,7 @@ def load_campgrounds(path: Path) -> list[dict[str, Any]]:
         campground_id = item.get("id")
         url = item.get("url")
         park = item.get("park")
+        state = item.get("state")
         if not isinstance(name, str) or not isinstance(campground_id, int):
             continue
         campgrounds.append(
@@ -94,6 +95,7 @@ def load_campgrounds(path: Path) -> list[dict[str, Any]]:
                 "id": campground_id,
                 "url": url if isinstance(url, str) else "",
                 "park": park.strip() if isinstance(park, str) else "",
+                "state": state.strip() if isinstance(state, str) else "",
             }
         )
 
@@ -392,10 +394,19 @@ class MonitorEditorApp:
         self.search_listbox.bind("<<ListboxSelect>>", self._on_search_selection)
         self.selected_listbox.bind("<<ListboxSelect>>", self._on_selected_selection)
 
-    def _render_label(self, campground: dict[str, Any]) -> str:
+    def _location_text(self, campground: dict[str, Any]) -> str:
         park = str(campground.get("park") or "").strip()
+        state = str(campground.get("state") or "").strip()
+        if park and state:
+            return f"{park} - {state}"
         if park:
-            return f"{campground['name']} ({campground['id']}) - {park}"
+            return park
+        return state
+
+    def _render_label(self, campground: dict[str, Any]) -> str:
+        location = self._location_text(campground)
+        if location:
+            return f"{campground['name']} ({campground['id']}) - {location}"
         return f"{campground['name']} ({campground['id']})"
 
     def _refresh_search_results(self) -> None:
@@ -408,6 +419,7 @@ class MonitorEditorApp:
                     query in str(item["name"]).lower()
                     or query in str(item["id"])
                     or query in str(item.get("park") or "").lower()
+                    or query in str(item.get("state") or "").lower()
                 )
             ]
         else:
@@ -424,6 +436,10 @@ class MonitorEditorApp:
         for campground_id in self.selected_ids:
             campground = self.campground_by_id.get(campground_id)
             if campground is None:
+                self.selected_listbox.insert(
+                    tk.END,
+                    f"Unknown campground (ID {campground_id})",
+                )
                 continue
             self.selected_listbox.insert(tk.END, self._render_label(campground))
 
@@ -522,8 +538,7 @@ class MonitorEditorApp:
                 campground_id = int(value)
             except (TypeError, ValueError):
                 continue
-            if campground_id in self.campground_by_id:
-                selected_ids.append(campground_id)
+            selected_ids.append(campground_id)
         self.selected_ids = selected_ids
         self.check_in_var.set(str(group.get("check_in", "")))
         self.check_out_var.set(str(group.get("check_out", "")))
@@ -579,10 +594,10 @@ class MonitorEditorApp:
         self.current_preview_request_id += 1
         request_id = self.current_preview_request_id
         name = str(campground["name"])
-        park = str(campground.get("park") or "").strip()
+        location = self._location_text(campground)
         campground_url = str(campground.get("url") or "").strip()
         self.preview_title_var.set(f"{name} ({campground_id})")
-        self.preview_subtitle_var.set(park)
+        self.preview_subtitle_var.set(location)
         self.preview_url_var.set(campground_url)
         self.current_campground_url = campground_url
         self.preview_status_var.set("Loading image...")
@@ -826,8 +841,7 @@ class MonitorEditorApp:
                         campground_id = int(value)
                     except (TypeError, ValueError):
                         continue
-                    if campground_id in self.campground_by_id:
-                        campground_ids.append(campground_id)
+                    campground_ids.append(campground_id)
 
                 if not campground_ids:
                     continue
