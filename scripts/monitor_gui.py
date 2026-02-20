@@ -409,27 +409,34 @@ class MonitorEditorApp:
             return f"{campground['name']} ({campground['id']}) - {location}"
         return f"{campground['name']} ({campground['id']})"
 
-    def _refresh_search_results(self) -> None:
+    def _refresh_search_results(self, preserve_status: bool = False) -> None:
         query = self.search_var.get().strip().lower()
+        selected_id_set = set(self.selected_ids)
         if query:
             self.filtered = [
                 item
                 for item in self.campgrounds
                 if (
-                    query in str(item["name"]).lower()
-                    or query in str(item["id"])
-                    or query in str(item.get("park") or "").lower()
-                    or query in str(item.get("state") or "").lower()
+                    int(item["id"]) not in selected_id_set
+                    and (
+                        query in str(item["name"]).lower()
+                        or query in str(item["id"])
+                        or query in str(item.get("park") or "").lower()
+                        or query in str(item.get("state") or "").lower()
+                    )
                 )
             ]
         else:
-            self.filtered = self.campgrounds
+            self.filtered = [
+                item for item in self.campgrounds if int(item["id"]) not in selected_id_set
+            ]
 
         self.search_listbox.delete(0, tk.END)
         for item in self.filtered:
             self.search_listbox.insert(tk.END, self._render_label(item))
 
-        self.status_var.set(f"Loaded {len(self.filtered)} matching campgrounds.")
+        if not preserve_status:
+            self.status_var.set(f"Loaded {len(self.filtered)} matching campgrounds.")
 
     def _refresh_selected_list(self) -> None:
         self.selected_listbox.delete(0, tk.END)
@@ -442,6 +449,7 @@ class MonitorEditorApp:
                 )
                 continue
             self.selected_listbox.insert(tk.END, self._render_label(campground))
+        self._refresh_search_results(preserve_status=True)
 
     def _refresh_trip_groups_list(self) -> None:
         self.trip_groups_listbox.delete(0, tk.END)
