@@ -3,8 +3,9 @@ from datetime import date
 
 import pytest
 
-from recbot2.cli import (
+from recgov_monitor.cli import (
     is_rate_limited_error,
+    load_campground_catalog,
     load_monitor_requests,
     parse_campground_ids,
     parse_stay_dates,
@@ -55,11 +56,10 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    webhook, poll_seconds, campground_names, monitors = load_monitor_requests(str(config_path))
+    webhook, poll_seconds, monitors = load_monitor_requests(str(config_path))
 
     assert webhook == "https://discord.com/api/webhooks/test"
     assert poll_seconds == 45
-    assert campground_names == {}
     assert len(monitors) == 2
     assert monitors[0].campground_ids == ["256892"]
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
@@ -98,7 +98,7 @@ def test_load_monitor_requests_rejects_negative_poll_seconds(tmp_path) -> None:
         load_monitor_requests(str(config_path))
 
 
-def test_load_monitor_requests_reads_campground_name_mapping(tmp_path) -> None:
+def test_load_monitor_requests_rejects_campground_name_mapping(tmp_path) -> None:
     config_path = tmp_path / "monitor.json"
     config_path.write_text(
         json.dumps(
@@ -117,5 +117,24 @@ def test_load_monitor_requests_reads_campground_name_mapping(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    _, _, campground_names, _ = load_monitor_requests(str(config_path))
-    assert campground_names == {"256892": "Simpson Springs Campground"}
+    with pytest.raises(ValueError, match="'campground_names' is no longer supported"):
+        load_monitor_requests(str(config_path))
+
+
+def test_load_campground_catalog_reads_name_mapping(tmp_path) -> None:
+    catalog_path = tmp_path / "campgrounds.json"
+    catalog_path.write_text(
+        json.dumps(
+            [
+                {
+                    "name": "Simpson Springs Campground",
+                    "id": 256892,
+                    "url": "https://www.recreation.gov/camping/campgrounds/256892",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    names = load_campground_catalog(str(catalog_path))
+    assert names == {"256892": "Simpson Springs Campground"}

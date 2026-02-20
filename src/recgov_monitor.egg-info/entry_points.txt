@@ -1,0 +1,2 @@
+[console_scripts]
+recgov-monitor = recgov_monitor.cli:main

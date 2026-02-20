@@ -1,13 +1,13 @@
 [project]
-name = "recbot2"
+name = "recgov-monitor"
 version = "0.1.0"
 description = "Check recreation.gov campsite availability and post to Discord"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["Pillow>=10.0.0"]
 
 [project.scripts]
-recbot2 = "recbot2.cli:main"
+recgov-monitor = "recgov_monitor.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

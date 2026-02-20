@@ -10,12 +10,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from recbot2.notifier import (
+from recgov_monitor.notifier import (
     DiscordNotifier,
     explain_webhook_error,
     validate_discord_webhook_url,
 )
-from recbot2.recreation import (
+from recgov_monitor.recreation import (
     RecreationGovClient,
     extract_campground_name,
     find_available_campsites,
@@ -54,7 +54,7 @@ def is_rate_limited_error(error_message: str) -> bool:
     return "429" in message or "too many requests" in message
 
 
-def _load_structured_file(path: Path) -> dict[str, Any]:
+def _load_structured_file(path: Path) -> Any:
     suffix = path.suffix.lower()
     text = path.read_text(encoding="utf-8")
 
@@ -64,9 +64,31 @@ def _load_structured_file(path: Path) -> dict[str, Any]:
     raise ValueError("Config file must end in .json")
 
 
+def load_campground_catalog(catalog_path: str) -> dict[str, str]:
+    raw = _load_structured_file(Path(catalog_path))
+    if not isinstance(raw, list):
+        raise ValueError("Campgrounds file must be a JSON array.")
+
+    campground_names: dict[str, str] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise ValueError("Each campground record must be an object.")
+
+        campground_id = item.get("id")
+        campground_name = item.get("name")
+        if not isinstance(campground_id, int):
+            raise ValueError("Each campground record must include integer field 'id'.")
+        if not isinstance(campground_name, str) or not campground_name.strip():
+            raise ValueError("Each campground record must include non-empty string field 'name'.")
+
+        campground_names[str(campground_id)] = campground_name.strip()
+
+    return campground_names
+
+
 def load_monitor_requests(
     config_path: str,
-) -> tuple[str | None, int | None, dict[str, str], list[MonitorRequest]]:
+) -> tuple[str | None, int | None, list[MonitorRequest]]:
     raw = _load_structured_file(Path(config_path))
 
     webhook = raw.get("discord_webhook_url")
@@ -77,15 +99,11 @@ def load_monitor_requests(
             raise ValueError("'poll_seconds' must be a non-negative integer.")
         poll_seconds = poll_seconds_raw
 
-    campground_names_raw = raw.get("campground_names", {})
-    campground_names: dict[str, str] = {}
-    if campground_names_raw is not None:
-        if not isinstance(campground_names_raw, dict):
-            raise ValueError("'campground_names' must be an object mapping id to name.")
-        for key, value in campground_names_raw.items():
-            if not isinstance(key, (str, int)) or not isinstance(value, str) or not value.strip():
-                raise ValueError("'campground_names' must map campground ids to non-empty names.")
-            campground_names[str(key)] = value.strip()
+    if "campground_names" in raw:
+        raise ValueError(
+            "'campground_names' is no longer supported in monitor config. "
+            "Use --campgrounds-file with exported RIDB JSON."
+        )
 
     monitors = raw.get("monitors")
     if not isinstance(monitors, list) or not monitors:
@@ -115,7 +133,7 @@ def load_monitor_requests(
             )
         )
 
-    return webhook if isinstance(webhook, str) else None, poll_seconds, campground_names, requests
+    return webhook if isinstance(webhook, str) else None, poll_seconds, requests
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -148,6 +166,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         help="Delay between recreation.gov API requests. Defaults to 1.0.",
+    )
+    parser.add_argument(
+        "--campgrounds-file",
+        default="campgrounds.json",
+        help="Path to exported RIDB campgrounds JSON. Defaults to campgrounds.json.",
     )
     parser.add_argument(
         "--rate-limit-cooldown-seconds",
@@ -189,7 +212,12 @@ def run_once(
                     f"{campground_id}. Sending Discord alert..."
                 )
                 try:
-                    notifier.notify(campground_id, campground_name, all_matches)
+                    notifier.notify(
+                        campground_id,
+                        campground_name,
+                        all_matches,
+                        requested_dates=monitor.requested_dates,
+                    )
                 except RuntimeError as exc:
                     print(
                         f"Discord webhook error for campground {campground_id}: "
@@ -209,17 +237,10 @@ def main() -> None:
     monitors: list[MonitorRequest]
     config_webhook: str | None = None
     config_poll_seconds: int | None = None
-    config_campground_names: dict[str, str] = {}
+    campground_names: dict[str, str]
     if args.config:
         try:
-            (
-                config_webhook,
-                config_poll_seconds,
-                config_campground_names,
-                monitors,
-            ) = load_monitor_requests(
-                args.config
-            )
+            config_webhook, config_poll_seconds, monitors = load_monitor_requests(args.config)
         except ValueError as exc:
             parser.error(str(exc))
     else:
@@ -236,6 +257,11 @@ def main() -> None:
             ]
         except ValueError as exc:
             parser.error(str(exc))
+
+    try:
+        campground_names = load_campground_catalog(args.campgrounds_file)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     webhook_url = args.discord_webhook_url or config_webhook
     if not webhook_url:
@@ -257,7 +283,7 @@ def main() -> None:
         try:
             exit_code = run_once(
                 monitors,
-                config_campground_names,
+                campground_names,
                 webhook_url,
                 args.request_delay_seconds,
             )

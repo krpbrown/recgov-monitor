@@ -1,4 +1,4 @@
-from recbot2.cli import main
+from recgov_monitor.cli import main
 
 
 if __name__ == "__main__":

@@ -1,8 +1,8 @@
 from datetime import date
 
-from recbot2.notifier import explain_webhook_error, validate_discord_webhook_url
-from recbot2.models import AvailabilityMatch
-from recbot2.notifier import DiscordNotifier
+from recgov_monitor.notifier import explain_webhook_error, validate_discord_webhook_url
+from recgov_monitor.models import AvailabilityMatch
+from recgov_monitor.notifier import DiscordNotifier
 
 
 def test_validate_discord_webhook_url_accepts_valid_url() -> None:
@@ -134,3 +134,43 @@ def test_notify_splits_content_into_multiple_messages_when_too_long() -> None:
             "Availability found for Simpson Springs Campground (256892)"
         )
     assert header_count == 1
+
+
+def test_notify_marks_partial_coverage_when_requested_window_not_fully_available() -> None:
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def post_json(self, url: str, payload: dict) -> None:
+            self.calls.append((url, payload))
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/123456/abcdef")
+    stub = StubClient()
+    notifier.client = stub  # type: ignore[assignment]
+
+    notifier.notify(
+        campground_id="256892",
+        campground_name="Simpson Springs Campground",
+        matches=[
+            AvailabilityMatch(
+                campsite_id="10041494",
+                campsite_name="Simpson Springs Group Site",
+                date=date(2026, 6, 3),
+                status="Available",
+            ),
+            AvailabilityMatch(
+                campsite_id="10041494",
+                campsite_name="Simpson Springs Group Site",
+                date=date(2026, 6, 4),
+                status="Available",
+            ),
+        ],
+        requested_dates={date(2026, 6, 1), date(2026, 6, 2), date(2026, 6, 3), date(2026, 6, 4)},
+    )
+
+    assert len(stub.calls) == 1
+    _, payload = stub.calls[0]
+    content = payload["content"]
+    assert "Partial availability found for Simpson Springs Campground (256892)" in content
+    assert "Requested nights: 4 | Full-site matches: 0 | Partial-site matches: 1" in content
+    assert "Coverage: Partial (2/4 nights)" in content

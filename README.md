@@ -1,6 +1,6 @@
-# recbot2
+# recgov-monitor
 
-`recbot2` checks recreation.gov campground availability for date ranges and sends a Discord webhook notification when campsites are available.
+`recgov-monitor` checks recreation.gov campground availability for date ranges and sends a Discord webhook notification when campsites are available.
 
 ## Features
 
@@ -18,7 +18,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-> `pip install -e .` is what creates the `recbot2` shell command.
+> `pip install -e .` is what creates the `recgov-monitor` shell command.
 
 ## Usage
 
@@ -30,9 +30,6 @@ pip install -e .
 {
   "discord_webhook_url": "https://discord.com/api/webhooks/...",
   "poll_seconds": 60,
-  "campground_names": {
-    "256892": "Simpson Springs Campground"
-  },
   "monitors": [
     {
       "campground_ids": [256892],
@@ -49,24 +46,53 @@ pip install -e .
 ```
 
 `poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
-`campground_names` is optional and lets you map campground ids to friendly names when the API payload does not include a name.
+Campground names are now loaded from an exported RIDB JSON file (default path: `campgrounds.json`).
 
 Run:
 
 ```bash
-recbot2 --config monitor.json
+recgov-monitor --config monitor.json
 ```
 
 Alternative equivalent invocation:
 
 ```bash
-python -m recbot2 --config monitor.json
+python -m recgov_monitor --config monitor.json
+
+Before running monitor mode, export campgrounds:
+
+```bash
+export RIDB_API_KEY=your_key_here
+python scripts/export_ridb_campgrounds.py --output campgrounds.json
+```
+
+By default, export now performs live recreation.gov validation and removes clearly invalid campground IDs
+(for example dead campground links). For quicker test runs, disable this with `--skip-validation` (or `-S`).
+The exported records also include a `park` field (when RIDB park/rec-area metadata is available).
+
+Fast test run example (20 records, force include campground `232492`):
+
+```bash
+export RIDB_API_KEY=your_key_here
+python scripts/export_ridb_campgrounds.py -S --test-limit 20 --test-include-id 232492 --output campgrounds.json
+```
+
+To create or update `monitor.json` with a desktop UI:
+
+```bash
+python scripts/monitor_gui.py --campgrounds-file campgrounds.json --monitor-file monitor.json --ridb-api-key "$RIDB_API_KEY"
+```
+
+The GUI lets you search and select one or more campgrounds, set check-in/check-out dates, and save.
+Search matches campground name, campground ID, and park name.
+When you click a campground, the GUI attempts to load a campground image using RIDB facility media.
+You can create multiple trip groups (each with its own campground set and date range), and each group is saved as a separate entry in `monitor.json` `monitors`.
 ```
 
 ### Direct CLI mode (single range)
 
 ```bash
-recbot2 \
+recgov-monitor \
   --campground-ids 256892,232447 \
   --check-in 2026-07-05 \
   --check-out 2026-07-07 \
@@ -76,7 +102,7 @@ recbot2 \
 Alternative equivalent invocation:
 
 ```bash
-python -m recbot2 \
+python -m recgov_monitor \
   --campground-ids 256892,232447 \
   --check-in 2026-07-05 \
   --check-out 2026-07-07 \
@@ -90,6 +116,7 @@ To reduce recreation.gov throttling risk, the CLI also supports:
 - `--rate-limit-cooldown-seconds` (default `300`) cooldown when a 429 is hit
 
 In all modes, `DISCORD_WEBHOOK_URL` can be set as an environment variable instead of passing `--discord-webhook-url`.
+You can override the campground catalog path with `--campgrounds-file`.
 
 ## Discord Message Format
 
@@ -102,6 +129,9 @@ Availability found for Simpson Springs Campground 256892
 - Site: 001 | Status: Available | Date: 3/5/2026 | Reserve: <https://www.recreation.gov/camping/campsites/10019342>
 ```
 
+If only some requested nights are available, Discord alerts are sent as **partial availability** and include
+`Coverage: Partial (x/y nights)` per site.
+
 ## Notes
 
 - In one-shot mode (`--poll-seconds 0`), a non-zero exit code means no availability was found.
@@ -113,7 +143,7 @@ Availability found for Simpson Springs Campground 256892
 If you see:
 
 ```bash
-bash: recbot2: command not found
+bash: recgov-monitor: command not found
 ```
 
 it means the CLI entrypoint is not installed in your current environment yet. From the repo root:
@@ -124,8 +154,9 @@ source .venv/bin/activate
 python -m pip install -e .
 ```
 
-Then re-run `recbot2 --config monitor.json`.
+Then re-run `recgov-monitor --config monitor.json`.
 
 If you see a Discord webhook error like `403 error code: 1010`, verify you are using the exact webhook URL from Discord channel **Integrations** (it must look like `https://discord.com/api/webhooks/<id>/<token>`), and confirm your network/proxy allows outbound requests to `discord.com`.
 
 If you see `HTTP Error 429: Too Many Requests`, recreation.gov is throttling requests. Increase `--request-delay-seconds` (for example `2` or `3`) and/or increase `--rate-limit-cooldown-seconds` (for example `600`). The app now automatically cools down when it detects 429 responses.
+

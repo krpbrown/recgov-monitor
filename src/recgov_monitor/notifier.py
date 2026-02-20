@@ -4,8 +4,8 @@ import json
 from datetime import date
 from urllib.parse import urlparse
 
-from recbot2.http import HttpClient
-from recbot2.models import AvailabilityMatch
+from recgov_monitor.http import HttpClient
+from recgov_monitor.models import AvailabilityMatch
 
 DISCORD_CONTENT_MAX_LENGTH = 2000
 
@@ -20,25 +20,63 @@ class DiscordNotifier:
         campground_id: str,
         campground_name: str,
         matches: list[AvailabilityMatch],
+        requested_dates: set[date] | None = None,
     ) -> None:
         if not matches:
             return
 
         fallback_name = f"campground {campground_id}".lower()
         if campground_name.strip().lower() == fallback_name:
-            header = f"Availability found for campground {campground_id}"
+            base_header = f"Availability found for campground {campground_id}"
         else:
-            header = f"Availability found for {campground_name} ({campground_id})"
+            base_header = f"Availability found for {campground_name} ({campground_id})"
+
         lines: list[str] = []
         grouped_matches = _group_matches_by_campsite(matches)
+
+        summary_line: str | None = None
+        if requested_dates:
+            requested_count = len(requested_dates)
+            full_count = 0
+            for match in grouped_matches:
+                if requested_dates.issubset(match.dates):
+                    full_count += 1
+            partial_count = len(grouped_matches) - full_count
+
+            if full_count == 0 and partial_count > 0:
+                header = f"Partial availability found for {base_header.removeprefix('Availability found for ')}"
+            elif partial_count > 0:
+                header = f"{base_header} (includes partial matches)"
+            else:
+                header = base_header
+
+            summary_line = (
+                f"Requested nights: {requested_count} | "
+                f"Full-site matches: {full_count} | Partial-site matches: {partial_count}"
+            )
+        else:
+            header = base_header
+
+        if summary_line:
+            lines.append(summary_line)
+
         for match in grouped_matches:
             reserve_url = f"https://www.recreation.gov/camping/campsites/{match.campsite_id}"
             short_dates = ", ".join(
                 f"{d.month}/{d.day}/{d.year}" for d in sorted(match.dates)
             )
             status = ", ".join(sorted(match.statuses))
+            coverage = ""
+            if requested_dates:
+                available_count = len(match.dates)
+                requested_count = len(requested_dates)
+                if requested_dates.issubset(match.dates):
+                    coverage = f" | Coverage: Full ({available_count}/{requested_count} nights)"
+                else:
+                    coverage = f" | Coverage: Partial ({available_count}/{requested_count} nights)"
             lines.append(
-                f"- Site: {match.campsite_name} | Status: {status} | Dates: {short_dates} | Reserve: <{reserve_url}>"
+                f"- Site: {match.campsite_name} | Status: {status} | Dates: {short_dates}"
+                f"{coverage} | Reserve: <{reserve_url}>"
             )
 
         for content in _build_discord_message_chunks(header, lines):

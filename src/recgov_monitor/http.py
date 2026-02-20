@@ -9,7 +9,7 @@ class HttpClient:
     def __init__(self, timeout_seconds: int = 15) -> None:
         self.timeout_seconds = timeout_seconds
         self.default_headers = {
-            "User-Agent": "recbot2/1.0",
+            "User-Agent": "recgov-monitor/1.0",
             "Accept": "application/json",
         }
 

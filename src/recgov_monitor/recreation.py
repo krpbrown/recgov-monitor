@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from recbot2.http import HttpClient
-from recbot2.models import AvailabilityMatch
+from recgov_monitor.http import HttpClient
+from recgov_monitor.models import AvailabilityMatch
 
 AVAILABLE_STATUSES = {"Available", "Reserveable"}
 

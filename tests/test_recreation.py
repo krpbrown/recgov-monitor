@@ -1,6 +1,6 @@
 from datetime import date
 
-from recbot2.recreation import extract_campground_name, find_available_campsites
+from recgov_monitor.recreation import extract_campground_name, find_available_campsites
 
 
 def test_find_available_campsites_filters_requested_days_and_status() -> None:
