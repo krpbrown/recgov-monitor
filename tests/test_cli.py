@@ -105,6 +105,19 @@ def test_parser_uses_discord_webhook_env_var(monkeypatch: pytest.MonkeyPatch) ->
     assert args.discord_webhook_url == "https://discord.com/api/webhooks/from-discord-webhook"
 
 
+def test_parser_uses_discord_logger_webhook_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DISCORD_LOGGER_WEBHOOK",
+        "https://discord.com/api/webhooks/from-discord-logger-webhook",
+    )
+    parser = build_parser()
+    args = parser.parse_args([])
+    assert (
+        args.discord_logger_webhook_url
+        == "https://discord.com/api/webhooks/from-discord-logger-webhook"
+    )
+
+
 def test_load_monitor_requests_rejects_negative_poll_seconds(tmp_path) -> None:
     config_path = tmp_path / "monitor.json"
     config_path.write_text(

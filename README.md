@@ -77,6 +77,7 @@ Optional environment variables:
 - `MONITOR_SYNC_ETAG_FILE=/data/.monitor_sync.etag` path for ETag cache used by conditional sync requests.
 - `GITHUB_TOKEN=<token>` optional auth token for private repo monitor sync URL.
 - `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` webhook passed via env (recommended).
+- `DISCORD_LOGGER_WEBHOOK=https://discord.com/api/webhooks/...` optional separate webhook for hourly status logs (time, uptime, and issue summary).
 - `TZ=America/Denver` set timezone used for "midnight" scheduling.
 
 ### Push to GitHub Packages (GHCR, local)
@@ -222,6 +223,7 @@ To reduce recreation.gov throttling risk, the CLI also supports:
 
 In all modes, `DISCORD_WEBHOOK` can be set as an environment variable instead of passing `--discord-webhook-url`.
 `DISCORD_WEBHOOK_URL` is still accepted as a backward-compatible fallback.
+`DISCORD_LOGGER_WEBHOOK` can be set to send hourly health/status logs to a separate Discord channel.
 You can override the campground catalog path with `--campgrounds-file`.
 
 ## Discord Message Format

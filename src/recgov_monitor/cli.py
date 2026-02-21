@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
+from recgov_monitor.http import HttpClient
 from recgov_monitor.notifier import (
     DiscordNotifier,
     explain_webhook_error,
@@ -98,6 +99,79 @@ class _RunLogger:
     def _write(self, message: str) -> None:
         self._file.write(f"{message}\n")
         self._file.flush()
+
+
+class _StatusReporter:
+    def __init__(
+        self,
+        webhook_url: str | None,
+        started_at: datetime,
+        *,
+        logger: _RunLogger,
+    ) -> None:
+        self.webhook_url = webhook_url.strip() if webhook_url else ""
+        self.started_at = started_at
+        self.logger = logger
+        self.client = HttpClient(timeout_seconds=10)
+        self.total_issues = 0
+        self.rate_limit_issues = 0
+        self.last_issue_message = ""
+        self.last_issue_at: datetime | None = None
+        self.next_emit_at = self._next_top_of_hour(started_at)
+
+    def _next_top_of_hour(self, now: datetime) -> datetime:
+        return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+
+    def seconds_until_next_emit(self, now: datetime | None = None) -> float:
+        current = now or datetime.now()
+        return max(0.0, (self.next_emit_at - current).total_seconds())
+
+    def record_issue(self, message: str, *, rate_limited: bool = False) -> None:
+        self.total_issues += 1
+        if rate_limited:
+            self.rate_limit_issues += 1
+        self.last_issue_message = message.strip()
+        self.last_issue_at = datetime.now()
+
+    def emit_if_due(self, now: datetime | None = None) -> None:
+        current = now or datetime.now()
+        if current < self.next_emit_at:
+            return
+        self.emit(current)
+
+    def emit(self, now: datetime) -> None:
+        self.next_emit_at = self._next_top_of_hour(now)
+        if not self.webhook_url:
+            return
+
+        uptime_seconds = int(max(0.0, (now - self.started_at).total_seconds()))
+        hours, rem = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(rem, 60)
+        days, hours = divmod(hours, 24)
+
+        if self.total_issues == 0:
+            issue_line = "Issues: none"
+        else:
+            last_issue_at = (
+                format_poll_timestamp(self.last_issue_at) if self.last_issue_at else "unknown"
+            )
+            issue_line = (
+                "Issues: "
+                f"{self.total_issues} total (rate-limit: {self.rate_limit_issues}, "
+                f"other: {self.total_issues - self.rate_limit_issues}) | "
+                f"Last: {last_issue_at} | {self.last_issue_message}"
+            )
+
+        content = (
+            "recgov-monitor hourly status\n"
+            f"Time: {format_poll_timestamp(now)}\n"
+            f"Uptime: {days}d {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            f"{issue_line}"
+        )
+        try:
+            self.client.post_json(self.webhook_url, {"content": content[:2000]})
+        except RuntimeError as exc:
+            self.logger.error(f"Logger webhook error: {explain_webhook_error(str(exc))}")
 
 
 def _load_structured_file(path: Path) -> Any:
@@ -202,6 +276,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Discord webhook URL. Defaults to DISCORD_WEBHOOK env var (fallback: DISCORD_WEBHOOK_URL).",
     )
     parser.add_argument(
+        "--discord-logger-webhook-url",
+        default=os.getenv("DISCORD_LOGGER_WEBHOOK"),
+        help="Discord webhook URL for hourly status logs. Defaults to DISCORD_LOGGER_WEBHOOK env var.",
+    )
+    parser.add_argument(
         "--poll-seconds",
         type=int,
         default=None,
@@ -240,6 +319,7 @@ def run_once(
     info_log: Callable[[str], None] | None = None,
     error_log: Callable[[str], None] | None = None,
     discord_log: Callable[[str], None] | None = None,
+    issue_log: Callable[[str], None] | None = None,
 ) -> int:
     client = RecreationGovClient()
     notifier = DiscordNotifier(discord_webhook_url)
@@ -276,10 +356,13 @@ def run_once(
                         log_message=discord_log,
                     )
                 except RuntimeError as exc:
-                    error(
+                    message = (
                         f"Discord webhook error for {campground_name}: "
                         f"{explain_webhook_error(str(exc))}"
                     )
+                    error(message)
+                    if issue_log is not None:
+                        issue_log(message)
             else:
                 info(f"No availability found for {campground_name}.")
 
@@ -328,6 +411,13 @@ def main() -> int:
     except ValueError as exc:
         parser.error(str(exc))
 
+    logger_webhook_url = (args.discord_logger_webhook_url or "").strip()
+    if logger_webhook_url:
+        try:
+            validate_discord_webhook_url(logger_webhook_url)
+        except ValueError as exc:
+            parser.error(f"Invalid logger webhook URL: {exc}")
+
     poll_seconds = (
         args.poll_seconds
         if args.poll_seconds is not None
@@ -335,6 +425,11 @@ def main() -> int:
     )
     logger = _RunLogger(Path(args.log_file))
     logger.info(f"Logging to {args.log_file}")
+    status_reporter = _StatusReporter(
+        webhook_url=logger_webhook_url,
+        started_at=datetime.now(),
+        logger=logger,
+    )
 
     try:
         while True:
@@ -350,6 +445,7 @@ def main() -> int:
                     discord_log=lambda message: logger.file_only(
                         f"Discord notification text:\n{message}"
                     ),
+                    issue_log=lambda message: status_reporter.record_issue(message),
                 )
                 if poll_seconds <= 0:
                     return exit_code
@@ -359,14 +455,28 @@ def main() -> int:
                 sleep_seconds = float(poll_seconds)
                 if is_rate_limited_error(message):
                     sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
+                    status_reporter.record_issue(message, rate_limited=True)
                     logger.error(
                         "Rate limited by recreation.gov (HTTP 429). "
                         f"Cooling down for {sleep_seconds} seconds before retrying."
                     )
+                else:
+                    status_reporter.record_issue(message)
                 logger.error(f"Error while checking availability: {message}")
                 if poll_seconds <= 0:
                     return 2
-            time.sleep(sleep_seconds)
+            remaining_sleep = sleep_seconds
+            while remaining_sleep > 0:
+                status_reporter.emit_if_due()
+                until_hourly = status_reporter.seconds_until_next_emit()
+                chunk = remaining_sleep
+                if until_hourly > 0:
+                    chunk = min(chunk, until_hourly)
+                if chunk <= 0:
+                    status_reporter.emit_if_due()
+                    continue
+                time.sleep(chunk)
+                remaining_sleep -= chunk
     except KeyboardInterrupt:
         logger.info("Monitoring stopped.")
         return 0
