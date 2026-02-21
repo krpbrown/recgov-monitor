@@ -78,6 +78,14 @@ def format_poll_timestamp(now: datetime | None = None) -> str:
     )
 
 
+def format_requested_date_span(requested_dates: set[date]) -> str:
+    if not requested_dates:
+        return "unknown dates"
+    check_in = min(requested_dates)
+    check_out = max(requested_dates) + timedelta(days=1)
+    return f"{check_in.isoformat()} to {check_out.isoformat()}"
+
+
 class _RunLogger:
     def __init__(self, path: Path) -> None:
         self._file = path.open("a", encoding="utf-8")
@@ -406,7 +414,19 @@ def run_once(
     info = info_log or print
     error = error_log or (lambda message: print(message, file=sys.stderr))
 
-    for monitor in monitors:
+    for trip_index, monitor in enumerate(monitors, start=1):
+        date_span = format_requested_date_span(monitor.requested_dates)
+        trip_campground_names = [
+            campground_names.get(campground_id, f"campground {campground_id}")
+            for campground_id in monitor.campground_ids
+        ]
+        info(
+            f"Trip {trip_index} ({date_span}) - querying "
+            f"{len(trip_campground_names)} campground(s):"
+        )
+        for campground_name in trip_campground_names:
+            info(f"  - {campground_name}")
+
         months = sorted({date(d.year, d.month, 1) for d in monitor.requested_dates})
         for campground_id in monitor.campground_ids:
             all_matches = []
@@ -424,7 +444,7 @@ def run_once(
                 found_any = True
                 info(
                     f"Found {len(all_matches)} available campsite slot(s) for {campground_name}. "
-                    "Sending Discord alert..."
+                    f"Trip {trip_index} ({date_span}). Sending Discord alert..."
                 )
                 try:
                     notifier.notify(
@@ -443,7 +463,7 @@ def run_once(
                     if issue_log is not None:
                         issue_log(message)
             else:
-                info(f"No availability found for {campground_name}.")
+                info(f"No availability found for {campground_name}. Trip {trip_index} ({date_span}).")
 
     return 0 if found_any else 1
 
