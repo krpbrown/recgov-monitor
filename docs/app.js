@@ -12,12 +12,22 @@ const state = {
 const byId = {};
 
 const el = (id) => document.getElementById(id);
-const status = (msg) => { el("status").textContent = msg; };
+const status = (msg) => {
+  const node = el("status");
+  if (!node) return;
+  node.textContent = msg;
+};
 const setRidbStatus = (msg, level = "") => {
   const node = el("ridbStatus");
+  if (!node) return;
   node.textContent = msg;
   node.classList.remove("ok", "error");
   if (level) node.classList.add(level);
+};
+const bindIfPresent = (id, eventName, handler) => {
+  const node = el(id);
+  if (!node) return;
+  node.addEventListener(eventName, handler);
 };
 
 function githubApiBase() {
@@ -160,21 +170,25 @@ function updatePreview(id) {
 function loadSavedRidbKey() {
   try {
     const saved = localStorage.getItem("recgovMonitorRidbKey");
-    if (saved) el("ridbApiKey").value = saved;
+    const input = el("ridbApiKey");
+    if (saved && input) input.value = saved;
   } catch (_) {
   }
 }
 
 function saveRidbKey() {
   try {
-    localStorage.setItem("recgovMonitorRidbKey", el("ridbApiKey").value.trim());
+    const input = el("ridbApiKey");
+    if (!input) return;
+    localStorage.setItem("recgovMonitorRidbKey", input.value.trim());
   } catch (_) {
   }
 }
 
 async function fetchPreviewImageUrl(item) {
   if (state.previewImageCache[item.id] !== undefined) return state.previewImageCache[item.id];
-  const ridbApiKey = el("ridbApiKey").value.trim();
+  const ridbNode = el("ridbApiKey");
+  const ridbApiKey = ridbNode ? ridbNode.value.trim() : "";
   if (!ridbApiKey) {
     state.previewImageCache[item.id] = "";
     return "";
@@ -207,7 +221,8 @@ async function fetchPreviewImageUrl(item) {
 }
 
 async function testRidbKey() {
-  const ridbApiKey = el("ridbApiKey").value.trim();
+  const ridbNode = el("ridbApiKey");
+  const ridbApiKey = ridbNode ? ridbNode.value.trim() : "";
   if (!ridbApiKey) {
     setRidbStatus("RIDB: key missing", "error");
     return;
@@ -411,26 +426,26 @@ function removeTripGroup() {
 
 function bindEvents() {
   loadSavedRidbKey();
-  el("loadBtn").addEventListener("click", onLoad);
-  el("saveBtn").addEventListener("click", onSave);
-  el("testRidbBtn").addEventListener("click", testRidbKey);
-  el("ridbApiKey").addEventListener("change", () => {
+  bindIfPresent("loadBtn", "click", onLoad);
+  bindIfPresent("saveBtn", "click", onSave);
+  bindIfPresent("testRidbBtn", "click", testRidbKey);
+  bindIfPresent("ridbApiKey", "change", () => {
     state.previewImageCache = {};
     saveRidbKey();
     setRidbStatus("RIDB: key updated");
   });
-  el("search").addEventListener("input", refreshAvailableList);
-  el("addBtn").addEventListener("click", addSelected);
-  el("removeBtn").addEventListener("click", removeSelected);
-  el("newTripBtn").addEventListener("click", newTripGroup);
-  el("upsertTripBtn").addEventListener("click", upsertTripGroup);
-  el("loadTripBtn").addEventListener("click", loadTripGroup);
-  el("removeTripBtn").addEventListener("click", removeTripGroup);
-  el("availableList").addEventListener("change", () => {
+  bindIfPresent("search", "input", refreshAvailableList);
+  bindIfPresent("addBtn", "click", addSelected);
+  bindIfPresent("removeBtn", "click", removeSelected);
+  bindIfPresent("newTripBtn", "click", newTripGroup);
+  bindIfPresent("upsertTripBtn", "click", upsertTripGroup);
+  bindIfPresent("loadTripBtn", "click", loadTripGroup);
+  bindIfPresent("removeTripBtn", "click", removeTripGroup);
+  bindIfPresent("availableList", "change", () => {
     const ids = selectedValues(el("availableList"));
     if (ids.length) updatePreview(ids[0]);
   });
-  el("selectedList").addEventListener("change", () => {
+  bindIfPresent("selectedList", "change", () => {
     const ids = selectedValues(el("selectedList"));
     if (ids.length) updatePreview(ids[0]);
   });
