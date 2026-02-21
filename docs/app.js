@@ -107,6 +107,20 @@ function groupSummary(group) {
   return `${name} ${range} trip`;
 }
 
+function rangeKey(group) {
+  const g = normalizeGroup(group);
+  return `${g.check_in}|${g.check_out}`;
+}
+
+function campgroundNameById(campgroundId) {
+  if (byId[campgroundId] && byId[campgroundId].name) return byId[campgroundId].name;
+  return `Campground ${campgroundId}`;
+}
+
+function listNamesFromIds(ids) {
+  return ids.map((id) => campgroundNameById(id)).join(", ");
+}
+
 function buildAutoCommitMessage() {
   const prev = state.loadedTripGroups.map(normalizeGroup);
   const next = state.tripGroups.map(normalizeGroup);
@@ -121,6 +135,44 @@ function buildAutoCommitMessage() {
   for (const [k, g] of prevMap.entries()) {
     if (!nextMap.has(k)) removed.push(g);
   }
+
+  const prevByRange = new Map();
+  const nextByRange = new Map();
+  for (const g of prev) {
+    const key = rangeKey(g);
+    const arr = prevByRange.get(key) || [];
+    arr.push(g);
+    prevByRange.set(key, arr);
+  }
+  for (const g of next) {
+    const key = rangeKey(g);
+    const arr = nextByRange.get(key) || [];
+    arr.push(g);
+    nextByRange.set(key, arr);
+  }
+
+  const detailedUpdates = [];
+  for (const [key, prevGroups] of prevByRange.entries()) {
+    const nextGroups = nextByRange.get(key);
+    if (!nextGroups || prevGroups.length !== 1 || nextGroups.length !== 1) continue;
+    const prevGroup = prevGroups[0];
+    const nextGroup = nextGroups[0];
+    const prevIds = new Set(prevGroup.campground_ids);
+    const nextIds = new Set(nextGroup.campground_ids);
+
+    const addedIds = [...nextIds].filter((id) => !prevIds.has(id));
+    const removedIds = [...prevIds].filter((id) => !nextIds.has(id));
+    if (addedIds.length === 0 && removedIds.length === 0) continue;
+
+    const range = `${shortDate(prevGroup.check_in)}-${shortDate(prevGroup.check_out)}`;
+    const parts = [];
+    if (addedIds.length > 0) parts.push(`Added ${listNamesFromIds(addedIds)}`);
+    if (removedIds.length > 0) parts.push(`Removed ${listNamesFromIds(removedIds)}`);
+    detailedUpdates.push(`Updated ${range} trip group: ${parts.join("; ")}`);
+  }
+
+  if (detailedUpdates.length === 1) return detailedUpdates[0];
+  if (detailedUpdates.length > 1) return `Updated ${detailedUpdates.length} trip groups`;
 
   if (added.length === 1 && removed.length === 0) return `Add ${groupSummary(added[0])}`;
   if (removed.length === 1 && added.length === 0) return `Remove ${groupSummary(removed[0])}`;
