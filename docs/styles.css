@@ -81,6 +81,29 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.tokenRow {
+  display: grid;
+  grid-template-columns: 130px minmax(220px, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.tokenRow .statusPill {
+  justify-self: start;
+}
+
+.tokenLabel {
+  font-weight: 600;
+}
+
+.inlineCheck {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .lists {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -172,5 +195,8 @@ button:hover {
   }
   .listButtons {
     flex-direction: row;
+  }
+  .tokenRow {
+    grid-template-columns: 1fr;
   }
 }

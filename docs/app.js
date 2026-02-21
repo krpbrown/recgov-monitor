@@ -2,6 +2,7 @@ const state = {
   campgrounds: [],
   selectedIds: [],
   tripGroups: [],
+  loadedTripGroups: [],
   activeTripIndex: null,
   monitorSha: null,
   monitorPollSeconds: 60,
@@ -72,6 +73,59 @@ function isoDateFromDisplay(displayDate) {
   if (!displayDate) return "";
   const [m, d, y] = displayDate.split("-");
   return `${y}-${m}-${d}`;
+}
+
+function normalizeGroup(group) {
+  const ids = Array.from(new Set(group.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)))).sort((a, b) => a - b);
+  return {
+    campground_ids: ids,
+    check_in: String(group.check_in || "").trim(),
+    check_out: String(group.check_out || "").trim(),
+  };
+}
+
+function groupIdentity(group) {
+  const g = normalizeGroup(group);
+  return `${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}`;
+}
+
+function shortDate(displayDate) {
+  const [m, d] = String(displayDate || "").split("-");
+  const month = Number(m);
+  const day = Number(d);
+  if (!Number.isInteger(month) || !Number.isInteger(day)) return displayDate;
+  return `${month}/${day}`;
+}
+
+function groupSummary(group) {
+  const g = normalizeGroup(group);
+  const firstId = g.campground_ids[0];
+  const name = firstId && byId[firstId] ? byId[firstId].name : `Campground ${firstId || ""}`.trim();
+  const range = `${shortDate(g.check_in)}-${shortDate(g.check_out)}`;
+  return `${name} ${range} trip`;
+}
+
+function buildAutoCommitMessage() {
+  const prev = state.loadedTripGroups.map(normalizeGroup);
+  const next = state.tripGroups.map(normalizeGroup);
+  const prevMap = new Map(prev.map((g) => [groupIdentity(g), g]));
+  const nextMap = new Map(next.map((g) => [groupIdentity(g), g]));
+
+  const added = [];
+  const removed = [];
+  for (const [k, g] of nextMap.entries()) {
+    if (!prevMap.has(k)) added.push(g);
+  }
+  for (const [k, g] of prevMap.entries()) {
+    if (!nextMap.has(k)) removed.push(g);
+  }
+
+  if (added.length === 1 && removed.length === 0) return `Add ${groupSummary(added[0])}`;
+  if (removed.length === 1 && added.length === 0) return `Remove ${groupSummary(removed[0])}`;
+  if (added.length > 0 && removed.length === 0) return `Add ${added.length} trip group(s)`;
+  if (removed.length > 0 && added.length === 0) return `Remove ${removed.length} trip group(s)`;
+  if (added.length > 0 || removed.length > 0) return `Update trip groups (+${added.length} -${removed.length})`;
+  return "Update monitor.json from web editor";
 }
 
 function selectedValues(select) {
@@ -378,6 +432,7 @@ async function onLoad() {
           }))
           .filter((m) => m.campground_ids.length > 0)
       : [];
+    state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
 
     state.activeTripIndex = null;
     state.selectedIds = state.tripGroups.length ? [...state.tripGroups[0].campground_ids] : [];
@@ -413,7 +468,7 @@ async function onSave() {
 
     const monitorPath = el("monitorPath").value.trim();
     const branch = el("branch").value.trim();
-    const message = el("commitMessage").value.trim() || "Update monitor.json from web editor";
+    const message = buildAutoCommitMessage();
     const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(payload, null, 2)}\n`)));
     const url = `${githubApiBase()}/${encodeURIComponent(monitorPath)}`;
     const resp = await fetch(url, {
@@ -436,6 +491,7 @@ async function onSave() {
     }
     const saved = await resp.json();
     state.monitorSha = saved.content?.sha || state.monitorSha;
+    state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
     status("Saved monitor.json to GitHub.");
   } catch (err) {
     status(String(err.message || err));

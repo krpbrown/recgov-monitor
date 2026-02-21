@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>recgov-monitor config editor</title>
-    <link rel="stylesheet" href="../styles.css?v=5" />
+    <link rel="stylesheet" href="../styles.css?v=6" />
   </head>
   <body>
     <main class="container">
@@ -12,26 +12,29 @@
 
       <section class="card">
         <h2>GitHub source</h2>
-        <div class="grid four">
+        <div class="grid three">
           <label>Owner <input id="owner" value="krpbrown" /></label>
           <label>Repo <input id="repo" value="recgov-monitor" /></label>
           <label>Branch <input id="branch" value="main" /></label>
+        </div>
+        <div class="grid two">
           <label>Monitor path <input id="monitorPath" value="monitor.json" /></label>
-        </div>
-        <div class="grid four">
           <label>Campgrounds path <input id="campgroundsPath" value="campgrounds.json" /></label>
-          <label>GitHub token <input id="token" type="password" placeholder="Fine-grained PAT" /></label>
-          <label>RIDB API key <input id="ridbApiKey" type="password" placeholder="for preview images" /></label>
-          <label>Commit message <input id="commitMessage" value="Update monitor.json from web editor" /></label>
         </div>
-        <div class="row">
+        <div class="tokenRow">
+          <label class="tokenLabel" for="token">GitHub token</label>
+          <input id="token" type="password" placeholder="Fine-grained PAT" />
           <button id="loadBtn">Load from GitHub</button>
+          <label class="inlineCheck"><input id="rememberGithubToken" type="checkbox" /> Remember token</label>
+        </div>
+        <div class="tokenRow">
+          <label class="tokenLabel" for="ridbApiKey">RIDB API key</label>
+          <input id="ridbApiKey" type="password" placeholder="for preview images" />
           <button id="testRidbBtn" type="button">Test RIDB key</button>
+          <label class="inlineCheck"><input id="rememberRidbKey" type="checkbox" /> Remember key</label>
           <span id="ridbStatus" class="statusPill">RIDB: not tested</span>
         </div>
         <div class="row">
-          <label><input id="rememberGithubToken" type="checkbox" /> Remember GitHub token on this device</label>
-          <label><input id="rememberRidbKey" type="checkbox" /> Remember RIDB key on this device</label>
           <button id="clearSavedSecretsBtn" type="button">Clear saved credentials</button>
         </div>
         <p class="hint">
@@ -80,6 +83,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=6"></script>
+    <script src="../app.js?v=7"></script>
   </body>
 </html>
