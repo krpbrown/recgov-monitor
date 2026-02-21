@@ -139,6 +139,40 @@ class _StatusReporter:
             return
         self.emit(current)
 
+    def emit_startup(self, now: datetime | None = None) -> None:
+        current = now or datetime.now()
+        if not self.webhook_url:
+            return
+        content = (
+            "Recgov Monitor is now polling\n"
+            f"Time: {format_poll_timestamp(current)}\n"
+            "Issues: none"
+        )
+        try:
+            self.client.post_json(self.webhook_url, {"content": content[:2000]})
+        except RuntimeError as exc:
+            self.logger.error(f"Logger webhook error: {explain_webhook_error(str(exc))}")
+
+    def emit_shutdown(self, reason: str, exit_code: int, now: datetime | None = None) -> None:
+        current = now or datetime.now()
+        if not self.webhook_url:
+            return
+        uptime_seconds = int(max(0.0, (current - self.started_at).total_seconds()))
+        hours, rem = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(rem, 60)
+        days, hours = divmod(hours, 24)
+        content = (
+            "recgov-monitor shutdown status\n"
+            f"Time: {format_poll_timestamp(current)}\n"
+            f"Uptime: {days}d {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            f"Exit code: {exit_code}\n"
+            f"Reason: {reason}"
+        )
+        try:
+            self.client.post_json(self.webhook_url, {"content": content[:2000]})
+        except RuntimeError as exc:
+            self.logger.error(f"Logger webhook error: {explain_webhook_error(str(exc))}")
+
     def emit(self, now: datetime) -> None:
         self.next_emit_at = self._next_top_of_hour(now)
         if not self.webhook_url:
@@ -430,6 +464,8 @@ def main() -> int:
         started_at=datetime.now(),
         logger=logger,
     )
+    logger.info(f"{format_poll_timestamp()} - Recgov Monitor is now polling")
+    status_reporter.emit_startup()
 
     try:
         while True:
@@ -448,6 +484,10 @@ def main() -> int:
                     issue_log=lambda message: status_reporter.record_issue(message),
                 )
                 if poll_seconds <= 0:
+                    status_reporter.emit_shutdown(
+                        reason="One-shot polling completed.",
+                        exit_code=exit_code,
+                    )
                     return exit_code
                 sleep_seconds = compute_sleep_seconds(poll_seconds)
             except Exception as exc:  # noqa: BLE001
@@ -464,6 +504,10 @@ def main() -> int:
                     status_reporter.record_issue(message)
                 logger.error(f"Error while checking availability: {message}")
                 if poll_seconds <= 0:
+                    status_reporter.emit_shutdown(
+                        reason="One-shot polling aborted after error.",
+                        exit_code=2,
+                    )
                     return 2
             remaining_sleep = sleep_seconds
             while remaining_sleep > 0:
@@ -479,6 +523,7 @@ def main() -> int:
                 remaining_sleep -= chunk
     except KeyboardInterrupt:
         logger.info("Monitoring stopped.")
+        status_reporter.emit_shutdown(reason="Monitoring stopped by user.", exit_code=0)
         return 0
     finally:
         logger.close()
