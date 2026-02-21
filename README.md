@@ -33,6 +33,7 @@ Run with baked-in defaults (no CLI args needed):
 ```bash
 docker run --rm \
   -e RIDB_API_KEY=your_key_here \
+  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
   recgov-monitor:latest
 ```
 
@@ -42,6 +43,7 @@ Equivalent with Podman:
 podman build -t recgov-monitor:latest .
 podman run --rm \
   -e RIDB_API_KEY=your_key_here \
+  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
   recgov-monitor:latest
 ```
 
@@ -58,6 +60,7 @@ docker run --rm \
   -v "$PWD/monitor.json:/data/monitor.json:ro" \
   -v "$PWD/campgrounds.json:/data/campgrounds.json" \
   -e RIDB_API_KEY=your_key_here \
+  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
   recgov-monitor:latest
 ```
 
@@ -68,6 +71,11 @@ Optional environment variables:
 - `AUTO_REFRESH_CAMPGROUNDS=1` enable/disable daily refresh loop (`0` disables).
 - `REFRESH_AT_STARTUP=0` run refresh once during container startup (`1` enables startup refresh).
 - `REFRESH_SKIP_VALIDATION=1` pass `--skip-validation` to refresh job for faster updates.
+- `MONITOR_SYNC_URL=https://raw.githubusercontent.com/<owner>/<repo>/<branch>/monitor.json` enable periodic remote monitor sync.
+- `MONITOR_SYNC_INTERVAL_SECONDS=300` sync interval in seconds.
+- `MONITOR_SYNC_AT_STARTUP=1` pull monitor config immediately on container start.
+- `GITHUB_TOKEN=<token>` optional auth token for private repo monitor sync URL.
+- `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` webhook passed via env (recommended).
 - `TZ=America/Denver` set timezone used for "midnight" scheduling.
 
 ### Push to GitHub Packages (GHCR, local)
@@ -82,6 +90,28 @@ docker push ghcr.io/<owner>/<repo>:latest
 
 - GitHub Actions workflow is provided in `.github/workflows/container-image.yml` and pushes to `ghcr.io/<owner>/<repo>`.
 
+## GitHub Pages Editor
+
+This repo includes a static web editor in `docs/` for editing `monitor.json` in GitHub from a browser.
+
+1. In GitHub: **Settings -> Pages**
+2. Set source to **Deploy from a branch**
+3. Select branch `main` and folder `/docs`
+4. Open the Pages URL (for example `https://<owner>.github.io/<repo>/`)
+5. Enter repo/branch/path values and a fine-grained GitHub token
+6. Click **Load from GitHub**, edit trips, then **Save monitor.json to GitHub**
+
+Token permissions:
+
+- Repository access: this repo only
+- Permissions: **Contents** read and write
+
+Notes:
+
+- The editor is fully static (runs on GitHub Pages, no backend).
+- If your repo is private, you must use a token to load/save.
+- The Raspberry Pi container can then pull updated `monitor.json` from GitHub.
+
 ## Usage
 
 ### Config file mode (recommended)
@@ -90,7 +120,6 @@ docker push ghcr.io/<owner>/<repo>:latest
 
 ```json
 {
-  "discord_webhook_url": "https://discord.com/api/webhooks/...",
   "poll_seconds": 60,
   "monitors": [
     {
@@ -183,7 +212,8 @@ To reduce recreation.gov throttling risk, the CLI also supports:
 - `--request-delay-seconds` (default `1.0`) delay between API requests
 - `--rate-limit-cooldown-seconds` (default `300`) cooldown when a 429 is hit
 
-In all modes, `DISCORD_WEBHOOK_URL` can be set as an environment variable instead of passing `--discord-webhook-url`.
+In all modes, `DISCORD_WEBHOOK` can be set as an environment variable instead of passing `--discord-webhook-url`.
+`DISCORD_WEBHOOK_URL` is still accepted as a backward-compatible fallback.
 You can override the campground catalog path with `--campgrounds-file`.
 
 ## Discord Message Format

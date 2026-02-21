@@ -4,6 +4,7 @@ from datetime import date, datetime
 import pytest
 
 from recgov_monitor.cli import (
+    build_parser,
     compute_sleep_seconds,
     format_poll_timestamp,
     is_rate_limited_error,
@@ -94,6 +95,14 @@ def test_compute_sleep_seconds_keeps_non_60_polls_unchanged() -> None:
 def test_format_poll_timestamp_matches_expected_style() -> None:
     stamp = format_poll_timestamp(now=datetime(2026, 2, 20, 18, 5, 5))
     assert stamp == "2/20/26 6:05:05 PM"
+
+
+def test_parser_uses_discord_webhook_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_WEBHOOK", "https://discord.com/api/webhooks/from-discord-webhook")
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/from-discord-webhook-url")
+    parser = build_parser()
+    args = parser.parse_args([])
+    assert args.discord_webhook_url == "https://discord.com/api/webhooks/from-discord-webhook"
 
 
 def test_load_monitor_requests_rejects_negative_poll_seconds(tmp_path) -> None:

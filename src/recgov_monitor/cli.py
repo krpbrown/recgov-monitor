@@ -198,8 +198,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--check-out", help="check-out date (YYYY-MM-DD)")
     parser.add_argument(
         "--discord-webhook-url",
-        default=os.getenv("DISCORD_WEBHOOK_URL"),
-        help="Discord webhook URL. Defaults to DISCORD_WEBHOOK_URL env var.",
+        default=os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL"),
+        help="Discord webhook URL. Defaults to DISCORD_WEBHOOK env var (fallback: DISCORD_WEBHOOK_URL).",
     )
     parser.add_argument(
         "--poll-seconds",

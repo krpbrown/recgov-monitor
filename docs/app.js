@@ -1,0 +1,322 @@
+const state = {
+  campgrounds: [],
+  selectedIds: [],
+  tripGroups: [],
+  activeTripIndex: null,
+  monitorSha: null,
+};
+
+const byId = {};
+
+const el = (id) => document.getElementById(id);
+const status = (msg) => { el("status").textContent = msg; };
+
+function githubApiBase() {
+  const owner = el("owner").value.trim();
+  const repo = el("repo").value.trim();
+  return `https://api.github.com/repos/${owner}/${repo}/contents`;
+}
+
+function authHeaders() {
+  const token = el("token").value.trim();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function toDisplayDate(storageDate) {
+  const [y, m, d] = storageDate.split("-");
+  return `${m}-${d}-${y}`;
+}
+
+function toStorageDate(displayDate) {
+  const [m, d, y] = displayDate.split("-");
+  return `${y}-${m}-${d}`;
+}
+
+function renderLabel(item) {
+  const location = [item.park || "", item.state || ""].filter(Boolean).join(" - ");
+  return location ? `${item.name} (${item.id}) - ${location}` : `${item.name} (${item.id})`;
+}
+
+function currentDisplayDate(isoDate) {
+  if (!isoDate) return "";
+  const [y, m, d] = isoDate.split("-");
+  return `${m}-${d}-${y}`;
+}
+
+function isoDateFromDisplay(displayDate) {
+  if (!displayDate) return "";
+  const [m, d, y] = displayDate.split("-");
+  return `${y}-${m}-${d}`;
+}
+
+function selectedValues(select) {
+  return Array.from(select.selectedOptions).map((o) => Number(o.value));
+}
+
+function refreshAvailableList() {
+  const q = el("search").value.trim().toLowerCase();
+  const available = el("availableList");
+  available.innerHTML = "";
+  for (const item of state.campgrounds) {
+    if (state.selectedIds.includes(item.id)) continue;
+    if (
+      q &&
+      !(
+        String(item.name).toLowerCase().includes(q) ||
+        String(item.id).includes(q) ||
+        String(item.park || "").toLowerCase().includes(q) ||
+        String(item.state || "").toLowerCase().includes(q)
+      )
+    ) {
+      continue;
+    }
+    const opt = document.createElement("option");
+    opt.value = String(item.id);
+    opt.textContent = renderLabel(item);
+    available.appendChild(opt);
+  }
+}
+
+function refreshSelectedList() {
+  const selected = el("selectedList");
+  selected.innerHTML = "";
+  for (const id of state.selectedIds) {
+    const item = byId[id];
+    const opt = document.createElement("option");
+    opt.value = String(id);
+    opt.textContent = item ? renderLabel(item) : `Unknown campground (${id})`;
+    selected.appendChild(opt);
+  }
+  refreshAvailableList();
+}
+
+function refreshTripGroupsList() {
+  const list = el("tripGroupsList");
+  list.innerHTML = "";
+  state.tripGroups.forEach((g, idx) => {
+    const names = g.campground_ids.slice(0, 3).map((id) => (byId[id] ? byId[id].name : String(id)));
+    const suffix = g.campground_ids.length > 3 ? `, +${g.campground_ids.length - 3} more` : "";
+    const opt = document.createElement("option");
+    opt.value = String(idx);
+    opt.textContent = `Trip ${idx + 1}: ${g.check_in} to ${g.check_out} | ${names.join(", ")}${suffix}`;
+    list.appendChild(opt);
+  });
+}
+
+function updatePreview(id) {
+  const item = byId[id];
+  if (!item) {
+    el("preview").textContent = "";
+    return;
+  }
+  const parts = [];
+  parts.push(`<strong>${item.name} (${item.id})</strong>`);
+  const location = [item.park || "", item.state || ""].filter(Boolean).join(" - ");
+  if (location) parts.push(`<div>${location}</div>`);
+  if (item.url) parts.push(`<div><a href="${item.url}" target="_blank" rel="noreferrer">Open campground page</a></div>`);
+  el("preview").innerHTML = parts.join("");
+}
+
+async function loadJsonFromRepo(path) {
+  const branch = encodeURIComponent(el("branch").value.trim());
+  const url = `${githubApiBase()}/${encodeURIComponent(path)}?ref=${branch}`;
+  const resp = await fetch(url, { headers: { ...authHeaders(), Accept: "application/vnd.github+json" } });
+  if (!resp.ok) throw new Error(`GitHub API error (${resp.status}) loading ${path}`);
+  const data = await resp.json();
+  const content = atob((data.content || "").replace(/\n/g, ""));
+  return { json: JSON.parse(content), sha: data.sha };
+}
+
+async function onLoad() {
+  try {
+    status("Loading campgrounds and monitor config...");
+    const campgroundsPath = el("campgroundsPath").value.trim();
+    const monitorPath = el("monitorPath").value.trim();
+    const campResult = await loadJsonFromRepo(campgroundsPath);
+    const monitorResult = await loadJsonFromRepo(monitorPath);
+
+    if (!Array.isArray(campResult.json)) throw new Error("campgrounds.json is not an array.");
+    state.campgrounds = campResult.json
+      .filter((x) => x && Number.isInteger(x.id) && typeof x.name === "string")
+      .map((x) => ({
+        id: Number(x.id),
+        name: String(x.name).trim(),
+        url: typeof x.url === "string" ? x.url : "",
+        park: typeof x.park === "string" ? x.park : "",
+        state: typeof x.state === "string" ? x.state : "",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+    Object.keys(byId).forEach((k) => delete byId[k]);
+    state.campgrounds.forEach((c) => { byId[c.id] = c; });
+
+    if (!monitorResult.json || typeof monitorResult.json !== "object") throw new Error("monitor.json must be an object.");
+    const monitor = monitorResult.json;
+    el("webhookUrl").value = typeof monitor.discord_webhook_url === "string" ? monitor.discord_webhook_url : "";
+    el("pollSeconds").value = Number.isInteger(monitor.poll_seconds) ? String(monitor.poll_seconds) : "60";
+    state.monitorSha = monitorResult.sha;
+
+    state.tripGroups = Array.isArray(monitor.monitors)
+      ? monitor.monitors
+          .filter((m) => m && Array.isArray(m.campground_ids) && typeof m.check_in === "string" && typeof m.check_out === "string")
+          .map((m) => ({
+            campground_ids: m.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)),
+            check_in: toDisplayDate(m.check_in),
+            check_out: toDisplayDate(m.check_out),
+          }))
+          .filter((m) => m.campground_ids.length > 0)
+      : [];
+
+    state.activeTripIndex = null;
+    state.selectedIds = state.tripGroups.length ? [...state.tripGroups[0].campground_ids] : [];
+    if (state.tripGroups.length) {
+      el("checkIn").value = isoDateFromDisplay(state.tripGroups[0].check_in);
+      el("checkOut").value = isoDateFromDisplay(state.tripGroups[0].check_out);
+    } else {
+      el("checkIn").value = "";
+      el("checkOut").value = "";
+    }
+
+    refreshSelectedList();
+    refreshTripGroupsList();
+    status(`Loaded ${state.campgrounds.length} campgrounds and ${state.tripGroups.length} trip group(s).`);
+  } catch (err) {
+    status(String(err.message || err));
+  }
+}
+
+async function onSave() {
+  try {
+    if (!state.monitorSha) throw new Error("Load monitor.json first.");
+    if (state.tripGroups.length === 0) throw new Error("Add at least one trip group.");
+    const poll = Number(el("pollSeconds").value);
+    if (!Number.isInteger(poll) || poll < 0) throw new Error("poll_seconds must be a non-negative integer.");
+
+    const monitors = state.tripGroups.map((g) => ({
+      campground_ids: g.campground_ids,
+      check_in: toStorageDate(g.check_in),
+      check_out: toStorageDate(g.check_out),
+    }));
+    const payload = { monitors, poll_seconds: poll };
+    const webhook = el("webhookUrl").value.trim();
+    if (webhook) payload.discord_webhook_url = webhook;
+
+    const monitorPath = el("monitorPath").value.trim();
+    const branch = el("branch").value.trim();
+    const message = el("commitMessage").value.trim() || "Update monitor.json from web editor";
+    const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(payload, null, 2)}\n`)));
+    const url = `${githubApiBase()}/${encodeURIComponent(monitorPath)}`;
+    const resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        ...authHeaders(),
+        "Content-Type": "application/json",
+        Accept: "application/vnd.github+json",
+      },
+      body: JSON.stringify({
+        message,
+        content,
+        sha: state.monitorSha,
+        branch,
+      }),
+    });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`Save failed (${resp.status}): ${body}`);
+    }
+    const saved = await resp.json();
+    state.monitorSha = saved.content?.sha || state.monitorSha;
+    status("Saved monitor.json to GitHub.");
+  } catch (err) {
+    status(String(err.message || err));
+  }
+}
+
+function addSelected() {
+  const ids = selectedValues(el("availableList"));
+  for (const id of ids) {
+    if (!state.selectedIds.includes(id)) state.selectedIds.push(id);
+  }
+  refreshSelectedList();
+}
+
+function removeSelected() {
+  const toRemove = new Set(selectedValues(el("selectedList")));
+  state.selectedIds = state.selectedIds.filter((id) => !toRemove.has(id));
+  refreshSelectedList();
+}
+
+function newTripGroup() {
+  state.activeTripIndex = null;
+  state.selectedIds = [];
+  el("checkIn").value = "";
+  el("checkOut").value = "";
+  refreshSelectedList();
+  status("Ready to create a new trip group.");
+}
+
+function upsertTripGroup() {
+  const checkInIso = el("checkIn").value;
+  const checkOutIso = el("checkOut").value;
+  if (!checkInIso || !checkOutIso) return status("Set both check-in and check-out dates.");
+  if (state.selectedIds.length === 0) return status("Select at least one campground.");
+  if (checkOutIso <= checkInIso) return status("Check-out must be after check-in.");
+
+  const group = {
+    campground_ids: [...state.selectedIds],
+    check_in: currentDisplayDate(checkInIso),
+    check_out: currentDisplayDate(checkOutIso),
+  };
+  if (state.activeTripIndex === null) {
+    state.tripGroups.push(group);
+    state.activeTripIndex = state.tripGroups.length - 1;
+    status(`Added trip group #${state.tripGroups.length}.`);
+  } else {
+    state.tripGroups[state.activeTripIndex] = group;
+    status(`Updated trip group #${state.activeTripIndex + 1}.`);
+  }
+  refreshTripGroupsList();
+  el("tripGroupsList").value = String(state.activeTripIndex);
+}
+
+function loadTripGroup() {
+  const idx = Number(el("tripGroupsList").value);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.tripGroups.length) return;
+  state.activeTripIndex = idx;
+  const group = state.tripGroups[idx];
+  state.selectedIds = [...group.campground_ids];
+  el("checkIn").value = isoDateFromDisplay(group.check_in);
+  el("checkOut").value = isoDateFromDisplay(group.check_out);
+  refreshSelectedList();
+  status(`Loaded trip group #${idx + 1}.`);
+}
+
+function removeTripGroup() {
+  const idx = Number(el("tripGroupsList").value);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.tripGroups.length) return;
+  state.tripGroups.splice(idx, 1);
+  state.activeTripIndex = null;
+  refreshTripGroupsList();
+  status(`Removed trip group #${idx + 1}.`);
+}
+
+function bindEvents() {
+  el("loadBtn").addEventListener("click", onLoad);
+  el("saveBtn").addEventListener("click", onSave);
+  el("search").addEventListener("input", refreshAvailableList);
+  el("addBtn").addEventListener("click", addSelected);
+  el("removeBtn").addEventListener("click", removeSelected);
+  el("newTripBtn").addEventListener("click", newTripGroup);
+  el("upsertTripBtn").addEventListener("click", upsertTripGroup);
+  el("loadTripBtn").addEventListener("click", loadTripGroup);
+  el("removeTripBtn").addEventListener("click", removeTripGroup);
+  el("availableList").addEventListener("change", () => {
+    const ids = selectedValues(el("availableList"));
+    if (ids.length) updatePreview(ids[0]);
+  });
+  el("selectedList").addEventListener("change", () => {
+    const ids = selectedValues(el("selectedList"));
+    if (ids.length) updatePreview(ids[0]);
+  });
+}
+
+bindEvents();
