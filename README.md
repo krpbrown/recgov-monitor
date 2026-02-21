@@ -77,7 +77,7 @@ Optional environment variables:
 - `MONITOR_SYNC_ETAG_FILE=/data/.monitor_sync.etag` path for ETag cache used by conditional sync requests.
 - `GITHUB_TOKEN=<token>` optional auth token for private repo monitor sync URL.
 - `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` webhook passed via env (recommended).
-- `DISCORD_LOGGER_WEBHOOK=https://discord.com/api/webhooks/...` optional separate webhook for hourly status logs (time, uptime, and issue summary).
+- `DISCORD_LOGGER_WEBHOOK=https://discord.com/api/webhooks/...` optional separate webhook for hourly status logs (time, uptime, successful query count, and issue summary for that hour).
 - `TZ=America/Denver` set timezone used for "midnight" scheduling.
 
 ### Push to GitHub Packages (GHCR, local)

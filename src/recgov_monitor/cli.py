@@ -105,18 +105,23 @@ class _StatusReporter:
     def __init__(
         self,
         webhook_url: str | None,
+        mention: str | None,
         started_at: datetime,
         *,
         logger: _RunLogger,
     ) -> None:
         self.webhook_url = webhook_url.strip() if webhook_url else ""
+        self.mention = mention.strip() if mention else ""
         self.started_at = started_at
         self.logger = logger
         self.client = HttpClient(timeout_seconds=10)
-        self.total_issues = 0
-        self.rate_limit_issues = 0
-        self.last_issue_message = ""
-        self.last_issue_at: datetime | None = None
+        self.interval_total_issues = 0
+        self.interval_rate_limit_issues = 0
+        self.interval_last_issue_message = ""
+        self.interval_last_issue_at: datetime | None = None
+        self.interval_successful_queries = 0
+        self.interval_total_queries = 0
+        self.interval_failed_queries = 0
         self.next_emit_at = self._next_top_of_hour(started_at)
 
     def _next_top_of_hour(self, now: datetime) -> datetime:
@@ -127,11 +132,19 @@ class _StatusReporter:
         return max(0.0, (self.next_emit_at - current).total_seconds())
 
     def record_issue(self, message: str, *, rate_limited: bool = False) -> None:
-        self.total_issues += 1
+        self.interval_total_issues += 1
         if rate_limited:
-            self.rate_limit_issues += 1
-        self.last_issue_message = message.strip()
-        self.last_issue_at = datetime.now()
+            self.interval_rate_limit_issues += 1
+        self.interval_last_issue_message = message.strip()
+        self.interval_last_issue_at = datetime.now()
+
+    def record_successful_query(self) -> None:
+        self.interval_total_queries += 1
+        self.interval_successful_queries += 1
+
+    def record_failed_query(self) -> None:
+        self.interval_total_queries += 1
+        self.interval_failed_queries += 1
 
     def emit_if_due(self, now: datetime | None = None) -> None:
         current = now or datetime.now()
@@ -176,6 +189,7 @@ class _StatusReporter:
     def emit(self, now: datetime) -> None:
         self.next_emit_at = self._next_top_of_hour(now)
         if not self.webhook_url:
+            self._reset_interval_counters()
             return
 
         uptime_seconds = int(max(0.0, (now - self.started_at).total_seconds()))
@@ -183,29 +197,52 @@ class _StatusReporter:
         minutes, seconds = divmod(rem, 60)
         days, hours = divmod(hours, 24)
 
-        if self.total_issues == 0:
+        if self.interval_total_issues == 0:
             issue_line = "Issues: none"
         else:
             last_issue_at = (
-                format_poll_timestamp(self.last_issue_at) if self.last_issue_at else "unknown"
+                format_poll_timestamp(self.interval_last_issue_at)
+                if self.interval_last_issue_at
+                else "unknown"
             )
             issue_line = (
                 "Issues: "
-                f"{self.total_issues} total (rate-limit: {self.rate_limit_issues}, "
-                f"other: {self.total_issues - self.rate_limit_issues}) | "
-                f"Last: {last_issue_at} | {self.last_issue_message}"
+                f"{self.interval_total_issues} total (rate-limit: {self.interval_rate_limit_issues}, "
+                f"other: {self.interval_total_issues - self.interval_rate_limit_issues}) | "
+                f"Last: {last_issue_at} | {self.interval_last_issue_message}"
             )
 
         content = (
             "recgov-monitor hourly status\n"
             f"Time: {format_poll_timestamp(now)}\n"
             f"Uptime: {days}d {hours:02d}:{minutes:02d}:{seconds:02d}\n"
+            f"Successful queries this interval: {self.interval_successful_queries}\n"
+            f"Failed queries this interval: {self.interval_failed_queries}\n"
             f"{issue_line}"
         )
+        if self.mention and self.interval_total_queries > 0:
+            failure_ratio = self.interval_failed_queries / self.interval_total_queries
+            if failure_ratio > 0.5:
+                content = (
+                    f"{content}\n"
+                    f"Alert: {self.mention} query failure ratio exceeded 50% this interval "
+                    f"({self.interval_failed_queries}/{self.interval_total_queries})."
+                )
         try:
             self.client.post_json(self.webhook_url, {"content": content[:2000]})
         except RuntimeError as exc:
             self.logger.error(f"Logger webhook error: {explain_webhook_error(str(exc))}")
+        finally:
+            self._reset_interval_counters()
+
+    def _reset_interval_counters(self) -> None:
+        self.interval_total_issues = 0
+        self.interval_rate_limit_issues = 0
+        self.interval_last_issue_message = ""
+        self.interval_last_issue_at = None
+        self.interval_successful_queries = 0
+        self.interval_total_queries = 0
+        self.interval_failed_queries = 0
 
 
 def _load_structured_file(path: Path) -> Any:
@@ -313,6 +350,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--discord-logger-webhook-url",
         default=os.getenv("DISCORD_LOGGER_WEBHOOK"),
         help="Discord webhook URL for hourly status logs. Defaults to DISCORD_LOGGER_WEBHOOK env var.",
+    )
+    parser.add_argument(
+        "--discord-logger-mention",
+        default=os.getenv("DISCORD_LOGGER_MENTION"),
+        help=(
+            "Optional mention text added to hourly status when >50% of interval queries fail. "
+            "Defaults to DISCORD_LOGGER_MENTION env var."
+        ),
     )
     parser.add_argument(
         "--poll-seconds",
@@ -446,6 +491,7 @@ def main() -> int:
         parser.error(str(exc))
 
     logger_webhook_url = (args.discord_logger_webhook_url or "").strip()
+    logger_mention = (args.discord_logger_mention or "").strip()
     if logger_webhook_url:
         try:
             validate_discord_webhook_url(logger_webhook_url)
@@ -461,6 +507,7 @@ def main() -> int:
     logger.info(f"Logging to {args.log_file}")
     status_reporter = _StatusReporter(
         webhook_url=logger_webhook_url,
+        mention=logger_mention,
         started_at=datetime.now(),
         logger=logger,
     )
@@ -489,10 +536,12 @@ def main() -> int:
                         exit_code=exit_code,
                     )
                     return exit_code
+                status_reporter.record_successful_query()
                 sleep_seconds = compute_sleep_seconds(poll_seconds)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
                 sleep_seconds = float(poll_seconds)
+                status_reporter.record_failed_query()
                 if is_rate_limited_error(message):
                     sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
                     status_reporter.record_issue(message, rate_limited=True)
