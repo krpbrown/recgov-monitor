@@ -83,25 +83,81 @@ button:hover {
 
 .tokenRow {
   display: grid;
-  grid-template-columns: 130px minmax(220px, 1fr) auto auto;
+  grid-template-columns: 130px minmax(220px, 1fr) 180px 180px;
   gap: 10px;
   align-items: center;
   margin-top: 10px;
-}
-
-.tokenRow .statusPill {
-  justify-self: start;
 }
 
 .tokenLabel {
   font-weight: 600;
 }
 
-.inlineCheck {
-  white-space: nowrap;
+.actionBtn {
+  height: 38px;
+  width: 100%;
+}
+
+.rememberBox {
+  height: 38px;
+  border: 1px solid #c7d2df;
+  border-radius: 6px;
+  background: #fff;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  padding: 0 10px;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.fieldWithIndicator {
+  position: relative;
+}
+
+.fieldWithIndicator input {
+  padding-right: 30px;
+}
+
+.indicatorDot {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  background: #9ca3af;
+  box-shadow: 0 0 0 1px #94a3b8;
+}
+
+.fieldWithIndicator.testing input {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 1px #f59e0b;
+}
+
+.fieldWithIndicator.testing .indicatorDot {
+  background: #f59e0b;
+  box-shadow: 0 0 0 1px #d97706;
+}
+
+.fieldWithIndicator.ok input {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 1px #22c55e;
+}
+
+.fieldWithIndicator.ok .indicatorDot {
+  background: #16a34a;
+  box-shadow: 0 0 0 1px #15803d;
+}
+
+.fieldWithIndicator.error input {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 1px #ef4444;
+}
+
+.fieldWithIndicator.error .indicatorDot {
+  background: #dc2626;
+  box-shadow: 0 0 0 1px #b91c1c;
 }
 
 .lists {
@@ -198,5 +254,8 @@ button:hover {
   }
   .tokenRow {
     grid-template-columns: 1fr;
+  }
+  .rememberBox {
+    width: 100%;
   }
 }

@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>recgov-monitor config editor</title>
-    <link rel="stylesheet" href="../styles.css?v=6" />
+    <link rel="stylesheet" href="../styles.css?v=7" />
   </head>
   <body>
     <main class="container">
@@ -23,23 +23,27 @@
         </div>
         <div class="tokenRow">
           <label class="tokenLabel" for="token">GitHub token</label>
-          <input id="token" type="password" placeholder="Fine-grained PAT" />
-          <button id="loadBtn">Load from GitHub</button>
-          <label class="inlineCheck"><input id="rememberGithubToken" type="checkbox" /> Remember token</label>
+          <input
+            id="token"
+            type="password"
+            placeholder="Fine-grained PAT"
+            title="Token needs repository Contents: Read/Write for this repo. Token is only used in this browser tab."
+          />
+          <button id="loadBtn" class="actionBtn">Load from GitHub</button>
+          <label class="rememberBox"><input id="rememberGithubToken" type="checkbox" /> Remember token</label>
         </div>
         <div class="tokenRow">
           <label class="tokenLabel" for="ridbApiKey">RIDB API key</label>
-          <input id="ridbApiKey" type="password" placeholder="for preview images" />
-          <button id="testRidbBtn" type="button">Test RIDB key</button>
-          <label class="inlineCheck"><input id="rememberRidbKey" type="checkbox" /> Remember key</label>
-          <span id="ridbStatus" class="statusPill">RIDB: not tested</span>
+          <div id="ridbFieldWrap" class="fieldWithIndicator" title="RIDB: not tested">
+            <input id="ridbApiKey" type="password" placeholder="for preview images" />
+            <span id="ridbDot" class="indicatorDot" aria-hidden="true"></span>
+          </div>
+          <button id="testRidbBtn" type="button" class="actionBtn">Test RIDB key</button>
+          <label class="rememberBox"><input id="rememberRidbKey" type="checkbox" /> Remember key</label>
         </div>
         <div class="row">
           <button id="clearSavedSecretsBtn" type="button">Clear saved credentials</button>
         </div>
-        <p class="hint">
-          Token needs repository Contents: Read/Write for this repo. The token is only used in this browser tab.
-        </p>
       </section>
 
       <section class="card">
@@ -83,6 +87,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=7"></script>
+    <script src="../app.js?v=8"></script>
   </body>
 </html>

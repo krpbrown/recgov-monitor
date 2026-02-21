@@ -25,11 +25,13 @@ const status = (msg) => {
   node.textContent = msg;
 };
 const setRidbStatus = (msg, level = "") => {
-  const node = el("ridbStatus");
-  if (!node) return;
-  node.textContent = msg;
-  node.classList.remove("ok", "error");
-  if (level) node.classList.add(level);
+  const wrap = el("ridbFieldWrap");
+  if (!wrap) return;
+  wrap.classList.remove("ok", "error", "testing");
+  if (level) wrap.classList.add(level);
+  wrap.title = msg;
+  const dot = el("ridbDot");
+  if (dot) dot.title = msg;
 };
 const bindIfPresent = (id, eventName, handler) => {
   const node = el(id);
@@ -368,7 +370,7 @@ async function testRidbKey() {
     return;
   }
   try {
-    setRidbStatus("RIDB: testing...");
+    setRidbStatus("RIDB: testing...", "testing");
     const idForTest = state.campgrounds.length ? state.campgrounds[0].id : 256892;
     const url = `https://ridb.recreation.gov/api/v1/facilities/${idForTest}/media?apikey=${encodeURIComponent(ridbApiKey)}`;
     const resp = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
@@ -561,7 +563,7 @@ function bindEvents() {
   bindIfPresent("ridbApiKey", "change", () => {
     state.previewImageCache = {};
     saveSecretsIfEnabled();
-    setRidbStatus("RIDB: key updated");
+    setRidbStatus("RIDB: key updated", "testing");
   });
   bindIfPresent("search", "input", refreshAvailableList);
   bindIfPresent("addBtn", "click", addSelected);
