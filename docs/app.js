@@ -10,6 +10,12 @@ const state = {
 };
 
 const byId = {};
+const STORAGE_KEYS = {
+  githubToken: "recgovMonitorGithubToken",
+  ridbKey: "recgovMonitorRidbKey",
+  rememberGithubToken: "recgovMonitorRememberGithubToken",
+  rememberRidbKey: "recgovMonitorRememberRidbKey",
+};
 
 const el = (id) => document.getElementById(id);
 const status = (msg) => {
@@ -167,22 +173,73 @@ function updatePreview(id) {
     });
 }
 
-function loadSavedRidbKey() {
+function loadSavedSecrets() {
   try {
-    const saved = localStorage.getItem("recgovMonitorRidbKey");
-    const input = el("ridbApiKey");
-    if (saved && input) input.value = saved;
+    const rememberGithub = localStorage.getItem(STORAGE_KEYS.rememberGithubToken) === "1";
+    const rememberRidb = localStorage.getItem(STORAGE_KEYS.rememberRidbKey) === "1";
+    const rememberGithubNode = el("rememberGithubToken");
+    const rememberRidbNode = el("rememberRidbKey");
+    if (rememberGithubNode) rememberGithubNode.checked = rememberGithub;
+    if (rememberRidbNode) rememberRidbNode.checked = rememberRidb;
+
+    if (rememberGithub) {
+      const savedGithub = localStorage.getItem(STORAGE_KEYS.githubToken) || "";
+      const tokenNode = el("token");
+      if (tokenNode) tokenNode.value = savedGithub;
+    }
+    if (rememberRidb) {
+      const savedRidb = localStorage.getItem(STORAGE_KEYS.ridbKey) || "";
+      const ridbNode = el("ridbApiKey");
+      if (ridbNode) ridbNode.value = savedRidb;
+    }
   } catch (_) {
   }
 }
 
-function saveRidbKey() {
+function saveSecretsIfEnabled() {
   try {
-    const input = el("ridbApiKey");
-    if (!input) return;
-    localStorage.setItem("recgovMonitorRidbKey", input.value.trim());
+    const rememberGithub = !!el("rememberGithubToken")?.checked;
+    const rememberRidb = !!el("rememberRidbKey")?.checked;
+    localStorage.setItem(STORAGE_KEYS.rememberGithubToken, rememberGithub ? "1" : "0");
+    localStorage.setItem(STORAGE_KEYS.rememberRidbKey, rememberRidb ? "1" : "0");
+
+    const tokenNode = el("token");
+    const ridbNode = el("ridbApiKey");
+
+    if (rememberGithub && tokenNode) {
+      localStorage.setItem(STORAGE_KEYS.githubToken, tokenNode.value.trim());
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.githubToken);
+    }
+
+    if (rememberRidb && ridbNode) {
+      localStorage.setItem(STORAGE_KEYS.ridbKey, ridbNode.value.trim());
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.ridbKey);
+    }
   } catch (_) {
   }
+}
+
+function clearSavedSecrets() {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.githubToken);
+    localStorage.removeItem(STORAGE_KEYS.ridbKey);
+    localStorage.setItem(STORAGE_KEYS.rememberGithubToken, "0");
+    localStorage.setItem(STORAGE_KEYS.rememberRidbKey, "0");
+  } catch (_) {
+  }
+  const tokenNode = el("token");
+  const ridbNode = el("ridbApiKey");
+  const rememberGithubNode = el("rememberGithubToken");
+  const rememberRidbNode = el("rememberRidbKey");
+  if (tokenNode) tokenNode.value = "";
+  if (ridbNode) ridbNode.value = "";
+  if (rememberGithubNode) rememberGithubNode.checked = false;
+  if (rememberRidbNode) rememberRidbNode.checked = false;
+  state.previewImageCache = {};
+  setRidbStatus("RIDB: not tested");
+  status("Cleared saved credentials.");
 }
 
 async function fetchPreviewImageUrl(item) {
@@ -425,13 +482,19 @@ function removeTripGroup() {
 }
 
 function bindEvents() {
-  loadSavedRidbKey();
+  loadSavedSecrets();
   bindIfPresent("loadBtn", "click", onLoad);
   bindIfPresent("saveBtn", "click", onSave);
   bindIfPresent("testRidbBtn", "click", testRidbKey);
+  bindIfPresent("clearSavedSecretsBtn", "click", clearSavedSecrets);
+  bindIfPresent("rememberGithubToken", "change", saveSecretsIfEnabled);
+  bindIfPresent("rememberRidbKey", "change", saveSecretsIfEnabled);
+  bindIfPresent("token", "change", saveSecretsIfEnabled);
+  bindIfPresent("token", "input", saveSecretsIfEnabled);
+  bindIfPresent("ridbApiKey", "input", saveSecretsIfEnabled);
   bindIfPresent("ridbApiKey", "change", () => {
     state.previewImageCache = {};
-    saveRidbKey();
+    saveSecretsIfEnabled();
     setRidbStatus("RIDB: key updated");
   });
   bindIfPresent("search", "input", refreshAvailableList);

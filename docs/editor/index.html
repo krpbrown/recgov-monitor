@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>recgov-monitor config editor</title>
-    <link rel="stylesheet" href="../styles.css?v=2" />
+    <link rel="stylesheet" href="../styles.css?v=3" />
   </head>
   <body>
     <main class="container">
@@ -29,6 +29,11 @@
           <button id="saveBtn">Save monitor.json to GitHub</button>
           <button id="testRidbBtn" type="button">Test RIDB key</button>
           <span id="ridbStatus" class="statusPill">RIDB: not tested</span>
+        </div>
+        <div class="row">
+          <label><input id="rememberGithubToken" type="checkbox" /> Remember GitHub token on this device</label>
+          <label><input id="rememberRidbKey" type="checkbox" /> Remember RIDB key on this device</label>
+          <button id="clearSavedSecretsBtn" type="button">Clear saved credentials</button>
         </div>
         <p class="hint">
           Token needs repository Contents: Read/Write for this repo. The token is only used in this browser tab.
@@ -72,6 +77,6 @@
 
       <p id="status">Ready.</p>
     </main>
-    <script src="../app.js?v=2"></script>
+    <script src="../app.js?v=3"></script>
   </body>
 </html>
