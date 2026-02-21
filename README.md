@@ -28,16 +28,12 @@ Build a local image:
 docker build -t recgov-monitor:latest .
 ```
 
-Run with local config/catalog mounted:
+Run with baked-in defaults (no CLI args needed):
 
 ```bash
 docker run --rm \
-  -v "$PWD/monitor.json:/data/monitor.json:ro" \
-  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
   -e RIDB_API_KEY=your_key_here \
-  -e CAMPGROUNDS_FILE=/data/campgrounds.json \
-  recgov-monitor:latest \
-  --config /data/monitor.json --campgrounds-file /data/campgrounds.json
+  recgov-monitor:latest
 ```
 
 Equivalent with Podman:
@@ -45,24 +41,32 @@ Equivalent with Podman:
 ```bash
 podman build -t recgov-monitor:latest .
 podman run --rm \
-  -v "$PWD/monitor.json:/data/monitor.json:ro" \
-  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
   -e RIDB_API_KEY=your_key_here \
-  -e CAMPGROUNDS_FILE=/data/campgrounds.json \
-  recgov-monitor:latest \
-  --config /data/monitor.json --campgrounds-file /data/campgrounds.json
+  recgov-monitor:latest
 ```
 
 Container behavior:
 
 - Starts monitoring immediately.
 - Refreshes `campgrounds.json` daily at local midnight inside the container.
-- Runs a startup refresh by default, then daily midnight refreshes.
+- Does not refresh on startup by default.
+
+Optional host mounts (to override defaults and persist nightly updates):
+
+```bash
+docker run --rm \
+  -v "$PWD/monitor.json:/data/monitor.json:ro" \
+  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
+  -e RIDB_API_KEY=your_key_here \
+  recgov-monitor:latest
+```
 
 Optional environment variables:
 
+- `MONITOR_FILE=/data/monitor.json` path to monitor config (default shown).
+- `CAMPGROUNDS_FILE=/data/campgrounds.json` path to campground catalog (default shown).
 - `AUTO_REFRESH_CAMPGROUNDS=1` enable/disable daily refresh loop (`0` disables).
-- `REFRESH_AT_STARTUP=1` run refresh once during container startup (`0` disables startup refresh).
+- `REFRESH_AT_STARTUP=0` run refresh once during container startup (`1` enables startup refresh).
 - `REFRESH_SKIP_VALIDATION=1` pass `--skip-validation` to refresh job for faster updates.
 - `TZ=America/Denver` set timezone used for "midnight" scheduling.
 

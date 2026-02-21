@@ -9,6 +9,8 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY scripts/export_campgrounds.py ./scripts/export_campgrounds.py
 COPY container-entrypoint.sh /usr/local/bin/container-entrypoint.sh
+COPY monitor.json /data/monitor.json
+COPY campgrounds.json /data/campgrounds.json
 
 RUN pip install --no-cache-dir .
 RUN chmod +x /usr/local/bin/container-entrypoint.sh

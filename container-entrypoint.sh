@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-CAMPGROUNDS_FILE="${CAMPGROUNDS_FILE:-campgrounds.json}"
+MONITOR_FILE="${MONITOR_FILE:-/data/monitor.json}"
+CAMPGROUNDS_FILE="${CAMPGROUNDS_FILE:-/data/campgrounds.json}"
 AUTO_REFRESH_CAMPGROUNDS="${AUTO_REFRESH_CAMPGROUNDS:-1}"
-REFRESH_AT_STARTUP="${REFRESH_AT_STARTUP:-1}"
+REFRESH_AT_STARTUP="${REFRESH_AT_STARTUP:-0}"
 REFRESH_SKIP_VALIDATION="${REFRESH_SKIP_VALIDATION:-0}"
 
 refresh_pid=""
@@ -73,6 +74,10 @@ if [ "$AUTO_REFRESH_CAMPGROUNDS" = "1" ]; then
   refresh_pid="$!"
 else
   log "[refresh] Daily campground refresh disabled."
+fi
+
+if [ "$#" -eq 0 ]; then
+  set -- --config "$MONITOR_FILE" --campgrounds-file "$CAMPGROUNDS_FILE"
 fi
 
 recgov-monitor "$@" &
