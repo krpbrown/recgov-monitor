@@ -33,7 +33,9 @@ Run with local config/catalog mounted:
 ```bash
 docker run --rm \
   -v "$PWD/monitor.json:/data/monitor.json:ro" \
-  -v "$PWD/campgrounds.json:/data/campgrounds.json:ro" \
+  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
+  -e RIDB_API_KEY=your_key_here \
+  -e CAMPGROUNDS_FILE=/data/campgrounds.json \
   recgov-monitor:latest \
   --config /data/monitor.json --campgrounds-file /data/campgrounds.json
 ```
@@ -44,26 +46,25 @@ Equivalent with Podman:
 podman build -t recgov-monitor:latest .
 podman run --rm \
   -v "$PWD/monitor.json:/data/monitor.json:ro" \
-  -v "$PWD/campgrounds.json:/data/campgrounds.json:ro" \
+  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
+  -e RIDB_API_KEY=your_key_here \
+  -e CAMPGROUNDS_FILE=/data/campgrounds.json \
   recgov-monitor:latest \
   --config /data/monitor.json --campgrounds-file /data/campgrounds.json
 ```
 
-### Push to GitLab Container Registry (local)
+Container behavior:
 
-```bash
-docker login registry.gitlab.com
-docker build -t registry.gitlab.com/<group>/<project>/recgov-monitor:latest .
-docker push registry.gitlab.com/<group>/<project>/recgov-monitor:latest
-```
+- Starts monitoring immediately.
+- Refreshes `campgrounds.json` daily at local midnight inside the container.
+- Runs a startup refresh by default, then daily midnight refreshes.
 
-For Podman:
+Optional environment variables:
 
-```bash
-podman login registry.gitlab.com
-podman build -t registry.gitlab.com/<group>/<project>/recgov-monitor:latest .
-podman push registry.gitlab.com/<group>/<project>/recgov-monitor:latest
-```
+- `AUTO_REFRESH_CAMPGROUNDS=1` enable/disable daily refresh loop (`0` disables).
+- `REFRESH_AT_STARTUP=1` run refresh once during container startup (`0` disables startup refresh).
+- `REFRESH_SKIP_VALIDATION=1` pass `--skip-validation` to refresh job for faster updates.
+- `TZ=America/Denver` set timezone used for "midnight" scheduling.
 
 ### Push to GitHub Packages (GHCR, local)
 
@@ -73,9 +74,8 @@ docker build -t ghcr.io/<owner>/<repo>:latest .
 docker push ghcr.io/<owner>/<repo>:latest
 ```
 
-### CI Pipelines
+### CI Pipeline
 
-- GitLab CI pipeline is provided in `.gitlab-ci.yml` and pushes to `$CI_REGISTRY_IMAGE`.
 - GitHub Actions workflow is provided in `.github/workflows/container-image.yml` and pushes to `ghcr.io/<owner>/<repo>`.
 
 ## Usage

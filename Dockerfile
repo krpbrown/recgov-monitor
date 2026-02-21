@@ -7,7 +7,10 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY scripts/export_campgrounds.py ./scripts/export_campgrounds.py
+COPY container-entrypoint.sh /usr/local/bin/container-entrypoint.sh
 
 RUN pip install --no-cache-dir .
+RUN chmod +x /usr/local/bin/container-entrypoint.sh
 
-ENTRYPOINT ["recgov-monitor"]
+ENTRYPOINT ["/usr/local/bin/container-entrypoint.sh"]

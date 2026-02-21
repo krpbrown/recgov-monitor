@@ -9,5 +9,6 @@ __pycache__
 *.log
 tests
 scripts
+!scripts/export_campgrounds.py
 monitor.json
 campgrounds.json
