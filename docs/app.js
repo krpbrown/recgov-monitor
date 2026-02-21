@@ -4,6 +4,7 @@ const state = {
   tripGroups: [],
   activeTripIndex: null,
   monitorSha: null,
+  monitorPollSeconds: 60,
   previewImageCache: {},
   previewRequestId: 0,
 };
@@ -12,6 +13,12 @@ const byId = {};
 
 const el = (id) => document.getElementById(id);
 const status = (msg) => { el("status").textContent = msg; };
+const setRidbStatus = (msg, level = "") => {
+  const node = el("ridbStatus");
+  node.textContent = msg;
+  node.classList.remove("ok", "error");
+  if (level) node.classList.add(level);
+};
 
 function githubApiBase() {
   const owner = el("owner").value.trim();
@@ -172,13 +179,10 @@ async function fetchPreviewImageUrl(item) {
     state.previewImageCache[item.id] = "";
     return "";
   }
-  const url = `https://ridb.recreation.gov/api/v1/facilities/${item.id}/media`;
+  const url = `https://ridb.recreation.gov/api/v1/facilities/${item.id}/media?apikey=${encodeURIComponent(ridbApiKey)}`;
   const resp = await fetch(url, {
     method: "GET",
-    headers: {
-      Accept: "application/json",
-      apikey: ridbApiKey,
-    },
+    headers: { Accept: "application/json" },
   });
   if (!resp.ok) {
     throw new Error(`RIDB media request failed (${resp.status})`);
@@ -200,6 +204,30 @@ async function fetchPreviewImageUrl(item) {
   }
   state.previewImageCache[item.id] = imageUrl;
   return imageUrl;
+}
+
+async function testRidbKey() {
+  const ridbApiKey = el("ridbApiKey").value.trim();
+  if (!ridbApiKey) {
+    setRidbStatus("RIDB: key missing", "error");
+    return;
+  }
+  try {
+    setRidbStatus("RIDB: testing...");
+    const idForTest = state.campgrounds.length ? state.campgrounds[0].id : 256892;
+    const url = `https://ridb.recreation.gov/api/v1/facilities/${idForTest}/media?apikey=${encodeURIComponent(ridbApiKey)}`;
+    const resp = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
+    if (!resp.ok) {
+      setRidbStatus(`RIDB: failed (${resp.status})`, "error");
+      return;
+    }
+    const payload = await resp.json();
+    const records = Array.isArray(payload?.RECDATA) ? payload.RECDATA : [];
+    const imageCount = records.filter((r) => r && String(r.MediaType || "").toLowerCase() === "image").length;
+    setRidbStatus(`RIDB: OK (${imageCount} image records)`, "ok");
+  } catch (_err) {
+    setRidbStatus("RIDB: request blocked/failed", "error");
+  }
 }
 
 async function loadJsonFromRepo(path) {
@@ -236,8 +264,7 @@ async function onLoad() {
 
     if (!monitorResult.json || typeof monitorResult.json !== "object") throw new Error("monitor.json must be an object.");
     const monitor = monitorResult.json;
-    el("webhookUrl").value = typeof monitor.discord_webhook_url === "string" ? monitor.discord_webhook_url : "";
-    el("pollSeconds").value = Number.isInteger(monitor.poll_seconds) ? String(monitor.poll_seconds) : "60";
+    state.monitorPollSeconds = Number.isInteger(monitor.poll_seconds) ? Number(monitor.poll_seconds) : 60;
     state.monitorSha = monitorResult.sha;
 
     state.tripGroups = Array.isArray(monitor.monitors)
@@ -273,7 +300,7 @@ async function onSave() {
   try {
     if (!state.monitorSha) throw new Error("Load monitor.json first.");
     if (state.tripGroups.length === 0) throw new Error("Add at least one trip group.");
-    const poll = Number(el("pollSeconds").value);
+    const poll = Number(state.monitorPollSeconds);
     if (!Number.isInteger(poll) || poll < 0) throw new Error("poll_seconds must be a non-negative integer.");
 
     const monitors = state.tripGroups.map((g) => ({
@@ -282,8 +309,6 @@ async function onSave() {
       check_out: toStorageDate(g.check_out),
     }));
     const payload = { monitors, poll_seconds: poll };
-    const webhook = el("webhookUrl").value.trim();
-    if (webhook) payload.discord_webhook_url = webhook;
 
     const monitorPath = el("monitorPath").value.trim();
     const branch = el("branch").value.trim();
@@ -388,9 +413,11 @@ function bindEvents() {
   loadSavedRidbKey();
   el("loadBtn").addEventListener("click", onLoad);
   el("saveBtn").addEventListener("click", onSave);
+  el("testRidbBtn").addEventListener("click", testRidbKey);
   el("ridbApiKey").addEventListener("change", () => {
     state.previewImageCache = {};
     saveRidbKey();
+    setRidbStatus("RIDB: key updated");
   });
   el("search").addEventListener("input", refreshAvailableList);
   el("addBtn").addEventListener("click", addSelected);

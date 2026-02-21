@@ -121,6 +121,28 @@ button:hover {
   color: #4b5563;
 }
 
+.statusPill {
+  align-self: center;
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  border: 1px solid #d3dce7;
+  color: #334155;
+}
+
+.statusPill.ok {
+  background: #e8f7ec;
+  border-color: #a6d8b5;
+  color: #0f5132;
+}
+
+.statusPill.error {
+  background: #fdecec;
+  border-color: #f0b5b5;
+  color: #7f1d1d;
+}
+
 #status {
   font-weight: 600;
 }

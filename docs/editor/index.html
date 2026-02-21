@@ -13,8 +13,8 @@
       <section class="card">
         <h2>GitHub source</h2>
         <div class="grid four">
-          <label>Owner <input id="owner" placeholder="your-user-or-org" /></label>
-          <label>Repo <input id="repo" placeholder="recgov-monitor" /></label>
+          <label>Owner <input id="owner" value="krpbrown" /></label>
+          <label>Repo <input id="repo" value="recgov-monitor" /></label>
           <label>Branch <input id="branch" value="main" /></label>
           <label>Monitor path <input id="monitorPath" value="monitor.json" /></label>
         </div>
@@ -27,18 +27,12 @@
         <div class="row">
           <button id="loadBtn">Load from GitHub</button>
           <button id="saveBtn">Save monitor.json to GitHub</button>
+          <button id="testRidbBtn" type="button">Test RIDB key</button>
+          <span id="ridbStatus" class="statusPill">RIDB: not tested</span>
         </div>
         <p class="hint">
           Token needs repository Contents: Read/Write for this repo. The token is only used in this browser tab.
         </p>
-      </section>
-
-      <section class="card">
-        <h2>Settings</h2>
-        <div class="grid two">
-          <label>Discord webhook URL <input id="webhookUrl" /></label>
-          <label>Poll seconds <input id="pollSeconds" type="number" min="0" value="60" /></label>
-        </div>
       </section>
 
       <section class="card">
