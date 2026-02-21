@@ -11,6 +11,7 @@ REFRESH_SKIP_VALIDATION="${REFRESH_SKIP_VALIDATION:-0}"
 MONITOR_SYNC_URL="${MONITOR_SYNC_URL:-}"
 MONITOR_SYNC_INTERVAL_SECONDS="${MONITOR_SYNC_INTERVAL_SECONDS:-300}"
 MONITOR_SYNC_AT_STARTUP="${MONITOR_SYNC_AT_STARTUP:-1}"
+MONITOR_SYNC_ETAG_FILE="${MONITOR_SYNC_ETAG_FILE:-/data/.monitor_sync.etag}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 
 refresh_pid=""
@@ -87,22 +88,38 @@ PY
 download_monitor_to_temp() {
   url="$1"
   out_path="$2"
-  python - "$url" "$GITHUB_TOKEN" "$out_path" <<'PY'
+  etag_path="$3"
+  python - "$url" "$GITHUB_TOKEN" "$out_path" "$etag_path" <<'PY'
 import pathlib
 import sys
+from urllib.error import HTTPError
 from urllib import request
 
 url = sys.argv[1]
 token = sys.argv[2]
 out_path = pathlib.Path(sys.argv[3])
+etag_path = pathlib.Path(sys.argv[4])
 headers = {"User-Agent": "recgov-monitor-container/1.0"}
 if token:
     headers["Authorization"] = f"Bearer {token}"
+if etag_path.exists():
+    etag = etag_path.read_text(encoding="utf-8").strip()
+    if etag:
+        headers["If-None-Match"] = etag
 req = request.Request(url, headers=headers, method="GET")
-with request.urlopen(req, timeout=30) as response:
-    data = response.read()
+try:
+    with request.urlopen(req, timeout=30) as response:
+        data = response.read()
+        etag = str(response.headers.get("ETag") or "").strip()
+except HTTPError as exc:
+    if exc.code == 304:
+        raise SystemExit(3)
+    raise
 out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_bytes(data)
+if etag:
+    etag_path.parent.mkdir(parents=True, exist_ok=True)
+    etag_path.write_text(f"{etag}\n", encoding="utf-8")
 PY
 }
 
@@ -111,7 +128,15 @@ sync_monitor_once() {
     return 0
   fi
   tmp_file="${MONITOR_FILE}.download"
-  if ! download_monitor_to_temp "$MONITOR_SYNC_URL" "$tmp_file"; then
+  set +e
+  download_monitor_to_temp "$MONITOR_SYNC_URL" "$tmp_file" "$MONITOR_SYNC_ETAG_FILE"
+  download_status="$?"
+  set -e
+  if [ "$download_status" = "3" ]; then
+    rm -f "$tmp_file" || true
+    return 0
+  fi
+  if [ "$download_status" != "0" ]; then
     log "[sync] Failed to download monitor config from MONITOR_SYNC_URL."
     rm -f "$tmp_file" || true
     return 1

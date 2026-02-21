@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>recgov-monitor config editor</title>
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>recgov-monitor config editor</h1>
+
+      <section class="card">
+        <h2>GitHub source</h2>
+        <div class="grid four">
+          <label>Owner <input id="owner" placeholder="your-user-or-org" /></label>
+          <label>Repo <input id="repo" placeholder="recgov-monitor" /></label>
+          <label>Branch <input id="branch" value="main" /></label>
+          <label>Monitor path <input id="monitorPath" value="monitor.json" /></label>
+        </div>
+        <div class="grid four">
+          <label>Campgrounds path <input id="campgroundsPath" value="campgrounds.json" /></label>
+          <label>GitHub token <input id="token" type="password" placeholder="Fine-grained PAT" /></label>
+          <label>RIDB API key <input id="ridbApiKey" type="password" placeholder="for preview images" /></label>
+          <label>Commit message <input id="commitMessage" value="Update monitor.json from web editor" /></label>
+        </div>
+        <div class="row">
+          <button id="loadBtn">Load from GitHub</button>
+          <button id="saveBtn">Save monitor.json to GitHub</button>
+        </div>
+        <p class="hint">
+          Token needs repository Contents: Read/Write for this repo. The token is only used in this browser tab.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Settings</h2>
+        <div class="grid two">
+          <label>Discord webhook URL <input id="webhookUrl" /></label>
+          <label>Poll seconds <input id="pollSeconds" type="number" min="0" value="60" /></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Campgrounds</h2>
+        <label>Search <input id="search" placeholder="name, id, park, state" /></label>
+        <div class="lists">
+          <div>
+            <h3>Available</h3>
+            <select id="availableList" size="14" multiple></select>
+          </div>
+          <div class="listButtons">
+            <button id="addBtn">Add &gt;&gt;</button>
+            <button id="removeBtn">&lt;&lt; Remove</button>
+          </div>
+          <div>
+            <h3>Current trip</h3>
+            <select id="selectedList" size="14" multiple></select>
+          </div>
+        </div>
+        <div id="preview" class="preview"></div>
+      </section>
+
+      <section class="card">
+        <h2>Trip group</h2>
+        <div class="grid two">
+          <label>Check-in <input id="checkIn" type="date" /></label>
+          <label>Check-out <input id="checkOut" type="date" /></label>
+        </div>
+        <div class="row">
+          <button id="newTripBtn">New trip group</button>
+          <button id="upsertTripBtn">Add/Update trip group</button>
+          <button id="removeTripBtn">Remove selected group</button>
+          <button id="loadTripBtn">Load selected group</button>
+        </div>
+        <select id="tripGroupsList" size="8"></select>
+      </section>
+
+      <p id="status">Ready.</p>
+    </main>
+    <script src="../app.js"></script>
+  </body>
+</html>

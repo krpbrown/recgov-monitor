@@ -4,6 +4,8 @@ const state = {
   tripGroups: [],
   activeTripIndex: null,
   monitorSha: null,
+  previewImageCache: {},
+  previewRequestId: 0,
 };
 
 const byId = {};
@@ -104,6 +106,8 @@ function refreshTripGroupsList() {
 }
 
 function updatePreview(id) {
+  state.previewRequestId += 1;
+  const requestId = state.previewRequestId;
   const item = byId[id];
   if (!item) {
     el("preview").textContent = "";
@@ -114,7 +118,88 @@ function updatePreview(id) {
   const location = [item.park || "", item.state || ""].filter(Boolean).join(" - ");
   if (location) parts.push(`<div>${location}</div>`);
   if (item.url) parts.push(`<div><a href="${item.url}" target="_blank" rel="noreferrer">Open campground page</a></div>`);
+  parts.push('<div class="previewMuted">Loading image preview...</div>');
   el("preview").innerHTML = parts.join("");
+
+  fetchPreviewImageUrl(item)
+    .then((imageUrl) => {
+      if (requestId !== state.previewRequestId) return;
+      const nextParts = [];
+      nextParts.push(`<strong>${item.name} (${item.id})</strong>`);
+      if (location) nextParts.push(`<div>${location}</div>`);
+      if (item.url) {
+        nextParts.push(`<div><a href="${item.url}" target="_blank" rel="noreferrer">Open campground page</a></div>`);
+      }
+      if (imageUrl) {
+        nextParts.push(`<img src="${imageUrl}" alt="Preview image for ${item.name}" loading="lazy" />`);
+      } else {
+        nextParts.push('<div class="previewMuted">No image found. Add RIDB API key above for better preview support.</div>');
+      }
+      el("preview").innerHTML = nextParts.join("");
+    })
+    .catch(() => {
+      if (requestId !== state.previewRequestId) return;
+      const nextParts = [];
+      nextParts.push(`<strong>${item.name} (${item.id})</strong>`);
+      if (location) nextParts.push(`<div>${location}</div>`);
+      if (item.url) {
+        nextParts.push(`<div><a href="${item.url}" target="_blank" rel="noreferrer">Open campground page</a></div>`);
+      }
+      nextParts.push('<div class="previewMuted">Image preview unavailable (RIDB request failed or blocked by browser CORS).</div>');
+      el("preview").innerHTML = nextParts.join("");
+    });
+}
+
+function loadSavedRidbKey() {
+  try {
+    const saved = localStorage.getItem("recgovMonitorRidbKey");
+    if (saved) el("ridbApiKey").value = saved;
+  } catch (_) {
+  }
+}
+
+function saveRidbKey() {
+  try {
+    localStorage.setItem("recgovMonitorRidbKey", el("ridbApiKey").value.trim());
+  } catch (_) {
+  }
+}
+
+async function fetchPreviewImageUrl(item) {
+  if (state.previewImageCache[item.id] !== undefined) return state.previewImageCache[item.id];
+  const ridbApiKey = el("ridbApiKey").value.trim();
+  if (!ridbApiKey) {
+    state.previewImageCache[item.id] = "";
+    return "";
+  }
+  const url = `https://ridb.recreation.gov/api/v1/facilities/${item.id}/media`;
+  const resp = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      apikey: ridbApiKey,
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`RIDB media request failed (${resp.status})`);
+  }
+  const payload = await resp.json();
+  let imageUrl = "";
+  const records = Array.isArray(payload?.RECDATA) ? payload.RECDATA : [];
+  for (const record of records) {
+    if (!record || typeof record !== "object") continue;
+    if (String(record.MediaType || "").toLowerCase() !== "image") continue;
+    for (const key of ["URL", "EntityMediaURL", "MediaURL"]) {
+      const candidate = record[key];
+      if (typeof candidate === "string" && candidate.startsWith("http")) {
+        imageUrl = candidate;
+        break;
+      }
+    }
+    if (imageUrl) break;
+  }
+  state.previewImageCache[item.id] = imageUrl;
+  return imageUrl;
 }
 
 async function loadJsonFromRepo(path) {
@@ -300,8 +385,13 @@ function removeTripGroup() {
 }
 
 function bindEvents() {
+  loadSavedRidbKey();
   el("loadBtn").addEventListener("click", onLoad);
   el("saveBtn").addEventListener("click", onSave);
+  el("ridbApiKey").addEventListener("change", () => {
+    state.previewImageCache = {};
+    saveRidbKey();
+  });
   el("search").addEventListener("input", refreshAvailableList);
   el("addBtn").addEventListener("click", addSelected);
   el("removeBtn").addEventListener("click", removeSelected);

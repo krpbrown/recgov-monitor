@@ -7,10 +7,11 @@ body {
   font-family: "Segoe UI", Tahoma, sans-serif;
   background: #f4f6f8;
   color: #1f2937;
+  min-height: 100vh;
 }
 
 .container {
-  max-width: 1200px;
+  max-width: 1380px;
   margin: 0 auto;
   padding: 20px;
 }
@@ -39,7 +40,8 @@ input, select {
 }
 
 select {
-  min-height: 240px;
+  min-height: 220px;
+  height: clamp(220px, 42vh, 560px);
 }
 
 button {
@@ -99,6 +101,19 @@ button:hover {
   border: 1px dashed #b8c5d3;
   border-radius: 6px;
   background: #fafcff;
+  min-height: 120px;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: min(42vh, 360px);
+  border-radius: 6px;
+  margin-top: 8px;
+  border: 1px solid #d3dce7;
+}
+
+.previewMuted {
+  color: #6b7280;
 }
 
 .hint {

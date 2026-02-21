@@ -74,6 +74,7 @@ Optional environment variables:
 - `MONITOR_SYNC_URL=https://raw.githubusercontent.com/<owner>/<repo>/<branch>/monitor.json` enable periodic remote monitor sync.
 - `MONITOR_SYNC_INTERVAL_SECONDS=300` sync interval in seconds.
 - `MONITOR_SYNC_AT_STARTUP=1` pull monitor config immediately on container start.
+- `MONITOR_SYNC_ETAG_FILE=/data/.monitor_sync.etag` path for ETag cache used by conditional sync requests.
 - `GITHUB_TOKEN=<token>` optional auth token for private repo monitor sync URL.
 - `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` webhook passed via env (recommended).
 - `TZ=America/Denver` set timezone used for "midnight" scheduling.
@@ -97,9 +98,10 @@ This repo includes a static web editor in `docs/` for editing `monitor.json` in 
 1. In GitHub: **Settings -> Pages**
 2. Set source to **Deploy from a branch**
 3. Select branch `main` and folder `/docs`
-4. Open the Pages URL (for example `https://<owner>.github.io/<repo>/`)
+4. Open the Pages editor URL (for example `https://<owner>.github.io/<repo>/editor/`)
 5. Enter repo/branch/path values and a fine-grained GitHub token
 6. Click **Load from GitHub**, edit trips, then **Save monitor.json to GitHub**
+7. For campground preview images in the editor, provide a RIDB API key in the page field.
 
 Token permissions:
 
