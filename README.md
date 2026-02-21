@@ -87,6 +87,12 @@ docker build -t ghcr.io/<owner>/<repo>:latest .
 docker push ghcr.io/<owner>/<repo>:latest
 ```
 
+Build ARM64 image locally (Raspberry Pi compatible):
+
+```bash
+docker buildx build --platform linux/arm64/v8 -t ghcr.io/<owner>/<repo>:arm64 --push .
+```
+
 ### CI Pipeline
 
 - GitHub Actions workflow is provided in `.github/workflows/container-image.yml` and pushes to `ghcr.io/<owner>/<repo>`.
