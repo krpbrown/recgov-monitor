@@ -130,6 +130,30 @@ function refreshTripGroupsList() {
   list.size = dynamicRows;
 }
 
+function currentGroupFromInputs() {
+  const checkInIso = el("checkIn").value;
+  const checkOutIso = el("checkOut").value;
+  if (!checkInIso || !checkOutIso) return null;
+  if (checkOutIso <= checkInIso) return null;
+  if (state.selectedIds.length === 0) return null;
+  return {
+    campground_ids: [...state.selectedIds],
+    check_in: currentDisplayDate(checkInIso),
+    check_out: currentDisplayDate(checkOutIso),
+  };
+}
+
+function autoUpdateActiveTripGroup() {
+  if (state.activeTripIndex === null) return;
+  if (state.activeTripIndex < 0 || state.activeTripIndex >= state.tripGroups.length) return;
+  const next = currentGroupFromInputs();
+  if (!next) return;
+  state.tripGroups[state.activeTripIndex] = next;
+  refreshTripGroupsList();
+  el("tripGroupsList").value = String(state.activeTripIndex);
+  status(`Updated trip group #${state.activeTripIndex + 1}.`);
+}
+
 function updatePreview(id) {
   state.previewRequestId += 1;
   const requestId = state.previewRequestId;
@@ -424,45 +448,26 @@ function addSelected() {
     if (!state.selectedIds.includes(id)) state.selectedIds.push(id);
   }
   refreshSelectedList();
+  autoUpdateActiveTripGroup();
 }
 
 function removeSelected() {
   const toRemove = new Set(selectedValues(el("selectedList")));
   state.selectedIds = state.selectedIds.filter((id) => !toRemove.has(id));
   refreshSelectedList();
+  autoUpdateActiveTripGroup();
 }
 
-function newTripGroup() {
-  state.activeTripIndex = null;
-  state.selectedIds = [];
-  el("checkIn").value = "";
-  el("checkOut").value = "";
-  refreshSelectedList();
-  status("Ready to create a new trip group.");
-}
-
-function upsertTripGroup() {
-  const checkInIso = el("checkIn").value;
-  const checkOutIso = el("checkOut").value;
-  if (!checkInIso || !checkOutIso) return status("Set both check-in and check-out dates.");
-  if (state.selectedIds.length === 0) return status("Select at least one campground.");
-  if (checkOutIso <= checkInIso) return status("Check-out must be after check-in.");
-
-  const group = {
-    campground_ids: [...state.selectedIds],
-    check_in: currentDisplayDate(checkInIso),
-    check_out: currentDisplayDate(checkOutIso),
-  };
-  if (state.activeTripIndex === null) {
-    state.tripGroups.push(group);
-    state.activeTripIndex = state.tripGroups.length - 1;
-    status(`Added trip group #${state.tripGroups.length}.`);
-  } else {
-    state.tripGroups[state.activeTripIndex] = group;
-    status(`Updated trip group #${state.activeTripIndex + 1}.`);
+function addTripGroup() {
+  const group = currentGroupFromInputs();
+  if (!group) {
+    return status("Set valid check-in/check-out and at least one campground before adding a trip group.");
   }
+  state.tripGroups.push(group);
+  state.activeTripIndex = state.tripGroups.length - 1;
   refreshTripGroupsList();
   el("tripGroupsList").value = String(state.activeTripIndex);
+  status(`Added trip group #${state.tripGroups.length}.`);
 }
 
 function loadTripGroup() {
@@ -505,10 +510,11 @@ function bindEvents() {
   bindIfPresent("search", "input", refreshAvailableList);
   bindIfPresent("addBtn", "click", addSelected);
   bindIfPresent("removeBtn", "click", removeSelected);
-  bindIfPresent("newTripBtn", "click", newTripGroup);
-  bindIfPresent("upsertTripBtn", "click", upsertTripGroup);
+  bindIfPresent("newTripBtn", "click", addTripGroup);
   bindIfPresent("loadTripBtn", "click", loadTripGroup);
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
+  bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
+  bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
   bindIfPresent("availableList", "change", () => {
     const ids = selectedValues(el("availableList"));
     if (ids.length) updatePreview(ids[0]);

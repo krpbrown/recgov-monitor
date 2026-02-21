@@ -148,6 +148,17 @@ button:hover {
   color: #7f1d1d;
 }
 
+.actionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.submitRow {
+  margin-left: auto;
+}
+
 #status {
   font-weight: 600;
 }
