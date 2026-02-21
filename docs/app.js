@@ -176,6 +176,7 @@ function updatePreview(id) {
 }
 
 function loadSavedSecrets() {
+  let autoLoadEligible = false;
   try {
     const rememberGithub = localStorage.getItem(STORAGE_KEYS.rememberGithubToken) === "1";
     const rememberRidb = localStorage.getItem(STORAGE_KEYS.rememberRidbKey) === "1";
@@ -188,6 +189,7 @@ function loadSavedSecrets() {
       const savedGithub = localStorage.getItem(STORAGE_KEYS.githubToken) || "";
       const tokenNode = el("token");
       if (tokenNode) tokenNode.value = savedGithub;
+      if (savedGithub.trim()) autoLoadEligible = true;
     }
     if (rememberRidb) {
       const savedRidb = localStorage.getItem(STORAGE_KEYS.ridbKey) || "";
@@ -196,6 +198,7 @@ function loadSavedSecrets() {
     }
   } catch (_) {
   }
+  return autoLoadEligible;
 }
 
 function saveSecretsIfEnabled() {
@@ -484,7 +487,7 @@ function removeTripGroup() {
 }
 
 function bindEvents() {
-  loadSavedSecrets();
+  const shouldAutoLoad = loadSavedSecrets();
   bindIfPresent("loadBtn", "click", onLoad);
   bindIfPresent("saveBtn", "click", onSave);
   bindIfPresent("testRidbBtn", "click", testRidbKey);
@@ -514,6 +517,10 @@ function bindEvents() {
     const ids = selectedValues(el("selectedList"));
     if (ids.length) updatePreview(ids[0]);
   });
+  if (shouldAutoLoad) {
+    status("Saved credentials found. Loading from GitHub...");
+    onLoad();
+  }
 }
 
 bindEvents();
