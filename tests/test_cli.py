@@ -1,9 +1,11 @@
 import json
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
 from recgov_monitor.cli import (
+    compute_sleep_seconds,
+    format_poll_timestamp,
     is_rate_limited_error,
     load_campground_catalog,
     load_monitor_requests,
@@ -73,6 +75,25 @@ def test_is_rate_limited_error_detects_429() -> None:
 
 def test_is_rate_limited_error_ignores_other_errors() -> None:
     assert not is_rate_limited_error("HTTP Error 403: Forbidden")
+
+
+def test_compute_sleep_seconds_aligns_60s_poll_to_second_5() -> None:
+    sleep_seconds = compute_sleep_seconds(60, now=datetime(2026, 2, 21, 18, 4, 18))
+    assert sleep_seconds == pytest.approx(47.0)
+
+
+def test_compute_sleep_seconds_moves_to_next_minute_when_past_second_5() -> None:
+    sleep_seconds = compute_sleep_seconds(60, now=datetime(2026, 2, 21, 18, 5, 7))
+    assert sleep_seconds == pytest.approx(58.0)
+
+
+def test_compute_sleep_seconds_keeps_non_60_polls_unchanged() -> None:
+    assert compute_sleep_seconds(45, now=datetime(2026, 2, 21, 18, 4, 18)) == 45.0
+
+
+def test_format_poll_timestamp_matches_expected_style() -> None:
+    stamp = format_poll_timestamp(now=datetime(2026, 2, 20, 18, 5, 5))
+    assert stamp == "2/20/26 6:05:05 PM"
 
 
 def test_load_monitor_requests_rejects_negative_poll_seconds(tmp_path) -> None:

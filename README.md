@@ -20,6 +20,64 @@ pip install -e .
 
 > `pip install -e .` is what creates the `recgov-monitor` shell command.
 
+## Container
+
+Build a local image:
+
+```bash
+docker build -t recgov-monitor:latest .
+```
+
+Run with local config/catalog mounted:
+
+```bash
+docker run --rm \
+  -v "$PWD/monitor.json:/data/monitor.json:ro" \
+  -v "$PWD/campgrounds.json:/data/campgrounds.json:ro" \
+  recgov-monitor:latest \
+  --config /data/monitor.json --campgrounds-file /data/campgrounds.json
+```
+
+Equivalent with Podman:
+
+```bash
+podman build -t recgov-monitor:latest .
+podman run --rm \
+  -v "$PWD/monitor.json:/data/monitor.json:ro" \
+  -v "$PWD/campgrounds.json:/data/campgrounds.json:ro" \
+  recgov-monitor:latest \
+  --config /data/monitor.json --campgrounds-file /data/campgrounds.json
+```
+
+### Push to GitLab Container Registry (local)
+
+```bash
+docker login registry.gitlab.com
+docker build -t registry.gitlab.com/<group>/<project>/recgov-monitor:latest .
+docker push registry.gitlab.com/<group>/<project>/recgov-monitor:latest
+```
+
+For Podman:
+
+```bash
+podman login registry.gitlab.com
+podman build -t registry.gitlab.com/<group>/<project>/recgov-monitor:latest .
+podman push registry.gitlab.com/<group>/<project>/recgov-monitor:latest
+```
+
+### Push to GitHub Packages (GHCR, local)
+
+```bash
+docker login ghcr.io -u <github-username>
+docker build -t ghcr.io/<owner>/<repo>:latest .
+docker push ghcr.io/<owner>/<repo>:latest
+```
+
+### CI Pipelines
+
+- GitLab CI pipeline is provided in `.gitlab-ci.yml` and pushes to `$CI_REGISTRY_IMAGE`.
+- GitHub Actions workflow is provided in `.github/workflows/container-image.yml` and pushes to `ghcr.io/<owner>/<repo>`.
+
 ## Usage
 
 ### Config file mode (recommended)

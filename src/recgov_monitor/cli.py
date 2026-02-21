@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from recgov_monitor.notifier import (
     DiscordNotifier,
@@ -52,6 +52,52 @@ def parse_stay_dates(check_in_raw: str, check_out_raw: str) -> set[date]:
 def is_rate_limited_error(error_message: str) -> bool:
     message = error_message.lower()
     return "429" in message or "too many requests" in message
+
+
+def compute_sleep_seconds(poll_seconds: int, now: datetime | None = None) -> float:
+    if poll_seconds != 60:
+        return float(poll_seconds)
+
+    current = now or datetime.now()
+    next_aligned = current.replace(second=5, microsecond=0)
+    if next_aligned <= current:
+        next_aligned += timedelta(minutes=1)
+    return (next_aligned - current).total_seconds()
+
+
+def format_poll_timestamp(now: datetime | None = None) -> str:
+    current = now or datetime.now()
+    hour = current.hour % 12
+    if hour == 0:
+        hour = 12
+    meridiem = "AM" if current.hour < 12 else "PM"
+    return (
+        f"{current.month}/{current.day}/{current.year % 100:02d} "
+        f"{hour}:{current.minute:02d}:{current.second:02d} {meridiem}"
+    )
+
+
+class _RunLogger:
+    def __init__(self, path: Path) -> None:
+        self._file = path.open("a", encoding="utf-8")
+
+    def close(self) -> None:
+        self._file.close()
+
+    def info(self, message: str) -> None:
+        print(message)
+        self._write(message)
+
+    def error(self, message: str) -> None:
+        print(message, file=sys.stderr)
+        self._write(message)
+
+    def file_only(self, message: str) -> None:
+        self._write(message)
+
+    def _write(self, message: str) -> None:
+        self._file.write(f"{message}\n")
+        self._file.flush()
 
 
 def _load_structured_file(path: Path) -> Any:
@@ -178,6 +224,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
         help="Cooldown after HTTP 429 before next cycle. Defaults to 300.",
     )
+    parser.add_argument(
+        "--log-file",
+        default="recgov-monitor.log",
+        help="Log file path for terminal output and Discord message text.",
+    )
     return parser
 
 
@@ -186,10 +237,15 @@ def run_once(
     campground_names: dict[str, str],
     discord_webhook_url: str,
     request_delay_seconds: float,
+    info_log: Callable[[str], None] | None = None,
+    error_log: Callable[[str], None] | None = None,
+    discord_log: Callable[[str], None] | None = None,
 ) -> int:
     client = RecreationGovClient()
     notifier = DiscordNotifier(discord_webhook_url)
     found_any = False
+    info = info_log or print
+    error = error_log or (lambda message: print(message, file=sys.stderr))
 
     for monitor in monitors:
         months = sorted({date(d.year, d.month, 1) for d in monitor.requested_dates})
@@ -207,9 +263,9 @@ def run_once(
 
             if all_matches:
                 found_any = True
-                print(
-                    f"Found {len(all_matches)} available campsite slot(s) for campground "
-                    f"{campground_id}. Sending Discord alert..."
+                info(
+                    f"Found {len(all_matches)} available campsite slot(s) for {campground_name}. "
+                    "Sending Discord alert..."
                 )
                 try:
                     notifier.notify(
@@ -217,15 +273,15 @@ def run_once(
                         campground_name,
                         all_matches,
                         requested_dates=monitor.requested_dates,
+                        log_message=discord_log,
                     )
                 except RuntimeError as exc:
-                    print(
-                        f"Discord webhook error for campground {campground_id}: "
-                        f"{explain_webhook_error(str(exc))}",
-                        file=sys.stderr,
+                    error(
+                        f"Discord webhook error for {campground_name}: "
+                        f"{explain_webhook_error(str(exc))}"
                     )
             else:
-                print(f"No availability found for campground {campground_id}.")
+                info(f"No availability found for {campground_name}.")
 
     return 0 if found_any else 1
 
@@ -277,35 +333,45 @@ def main() -> int:
         if args.poll_seconds is not None
         else (config_poll_seconds if config_poll_seconds is not None else 60)
     )
+    logger = _RunLogger(Path(args.log_file))
+    logger.info(f"Logging to {args.log_file}")
 
     try:
         while True:
-            sleep_seconds = poll_seconds
+            logger.info(f"{format_poll_timestamp()} - Querying")
             try:
                 exit_code = run_once(
                     monitors,
                     campground_names,
                     webhook_url,
                     args.request_delay_seconds,
+                    info_log=logger.info,
+                    error_log=logger.error,
+                    discord_log=lambda message: logger.file_only(
+                        f"Discord notification text:\n{message}"
+                    ),
                 )
                 if poll_seconds <= 0:
                     return exit_code
+                sleep_seconds = compute_sleep_seconds(poll_seconds)
             except Exception as exc:  # noqa: BLE001
                 message = str(exc)
+                sleep_seconds = float(poll_seconds)
                 if is_rate_limited_error(message):
                     sleep_seconds = max(poll_seconds, args.rate_limit_cooldown_seconds)
-                    print(
+                    logger.error(
                         "Rate limited by recreation.gov (HTTP 429). "
-                        f"Cooling down for {sleep_seconds} seconds before retrying.",
-                        file=sys.stderr,
+                        f"Cooling down for {sleep_seconds} seconds before retrying."
                     )
-                print(f"Error while checking availability: {message}", file=sys.stderr)
+                logger.error(f"Error while checking availability: {message}")
                 if poll_seconds <= 0:
                     return 2
             time.sleep(sleep_seconds)
     except KeyboardInterrupt:
-        print("Monitoring stopped.")
+        logger.info("Monitoring stopped.")
         return 0
+    finally:
+        logger.close()
 
 if __name__ == "__main__":
     raise SystemExit(main())

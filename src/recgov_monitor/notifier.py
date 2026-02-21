@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from typing import Callable
 from urllib.parse import urlparse
 
 from recgov_monitor.http import HttpClient
@@ -21,6 +22,7 @@ class DiscordNotifier:
         campground_name: str,
         matches: list[AvailabilityMatch],
         requested_dates: set[date] | None = None,
+        log_message: Callable[[str], None] | None = None,
     ) -> None:
         if not matches:
             return
@@ -80,6 +82,8 @@ class DiscordNotifier:
             )
 
         for content in _build_discord_message_chunks(header, lines):
+            if log_message is not None:
+                log_message(content)
             payload = {"content": content}
             self.client.post_json(self.webhook_url, payload)
 

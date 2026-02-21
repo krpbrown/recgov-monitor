@@ -174,3 +174,34 @@ def test_notify_marks_partial_coverage_when_requested_window_not_fully_available
     assert "Partial availability found for Simpson Springs Campground (256892)" in content
     assert "Requested nights: 4 | Full-site matches: 0 | Partial-site matches: 1" in content
     assert "Coverage: Partial (2/4 nights)" in content
+
+
+def test_notify_can_emit_message_content_to_logger_callback() -> None:
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def post_json(self, url: str, payload: dict) -> None:
+            self.calls.append((url, payload))
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/123456/abcdef")
+    stub = StubClient()
+    notifier.client = stub  # type: ignore[assignment]
+    captured: list[str] = []
+
+    notifier.notify(
+        campground_id="256892",
+        campground_name="Simpson Springs Campground",
+        matches=[
+            AvailabilityMatch(
+                campsite_id="10019342",
+                campsite_name="001",
+                date=date(2026, 3, 5),
+                status="Available",
+            )
+        ],
+        log_message=captured.append,
+    )
+
+    assert len(captured) == 1
+    assert "Availability found for Simpson Springs Campground (256892)" in captured[0]
