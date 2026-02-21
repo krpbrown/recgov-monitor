@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>recgov-monitor config editor</title>
-    <link rel="stylesheet" href="../styles.css?v=3" />
+    <link rel="stylesheet" href="../styles.css?v=4" />
   </head>
   <body>
     <main class="container">
@@ -46,7 +46,7 @@
         <div class="lists">
           <div>
             <h3>Available</h3>
-            <select id="availableList" size="14" multiple></select>
+            <select id="availableList" class="campSelect" size="14" multiple></select>
           </div>
           <div class="listButtons">
             <button id="addBtn">Add &gt;&gt;</button>
@@ -54,7 +54,7 @@
           </div>
           <div>
             <h3>Current trip</h3>
-            <select id="selectedList" size="14" multiple></select>
+            <select id="selectedList" class="campSelect" size="14" multiple></select>
           </div>
         </div>
         <div id="preview" class="preview"></div>
@@ -72,11 +72,11 @@
           <button id="removeTripBtn">Remove selected group</button>
           <button id="loadTripBtn">Load selected group</button>
         </div>
-        <select id="tripGroupsList" size="8"></select>
+        <select id="tripGroupsList" size="2"></select>
       </section>
 
       <p id="status">Ready.</p>
     </main>
-    <script src="../app.js?v=3"></script>
+    <script src="../app.js?v=4"></script>
   </body>
 </html>

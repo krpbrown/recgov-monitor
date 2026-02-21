@@ -39,7 +39,7 @@ input, select {
   border-radius: 6px;
 }
 
-select {
+.campSelect {
   min-height: 220px;
   height: clamp(220px, 42vh, 560px);
 }
@@ -114,6 +114,11 @@ button:hover {
 
 .previewMuted {
   color: #6b7280;
+}
+
+#tripGroupsList {
+  min-height: 0;
+  height: auto;
 }
 
 .hint {

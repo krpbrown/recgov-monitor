@@ -126,6 +126,8 @@ function refreshTripGroupsList() {
     opt.textContent = `Trip ${idx + 1}: ${g.check_in} to ${g.check_out} | ${names.join(", ")}${suffix}`;
     list.appendChild(opt);
   });
+  const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
+  list.size = dynamicRows;
 }
 
 function updatePreview(id) {
