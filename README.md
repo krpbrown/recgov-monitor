@@ -7,6 +7,7 @@
 - Query recreation.gov monthly availability API for one or more campgrounds.
 - Accept trip dates as check-in and check-out.
 - Support multiple monitor groups through a JSON config file.
+- Optional per-trip `discord_tag` so alerts can mention different users/roles per trip group.
 - Poll every 60 seconds by default.
 - Send formatted notifications to a Discord webhook.
 
@@ -134,7 +135,8 @@ Notes:
     {
       "campground_ids": [256892],
       "check_in": "2026-03-05",
-      "check_out": "2026-03-07"
+      "check_out": "2026-03-07",
+      "discord_tag": "@user1"
     },
     {
       "campground_ids": [251869, 232492],
@@ -147,6 +149,7 @@ Notes:
 
 `poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
 Campground names are now loaded from an exported RIDB JSON file (default path: `campgrounds.json`).
+Each monitor entry can optionally include `discord_tag` (for example `@username` or `<@123456789012345678>`), which is prepended to Discord availability alerts for that specific trip group.
 
 Run:
 
@@ -192,7 +195,7 @@ python scripts/monitor_gui.py --campgrounds-file campgrounds.json --monitor-file
 The GUI lets you search and select one or more campgrounds, set check-in/check-out dates, and save.
 Search matches campground name, campground ID, and park name.
 When you click a campground, the GUI attempts to load a campground image using RIDB facility media.
-You can create multiple trip groups (each with its own campground set and date range), and each group is saved as a separate entry in `monitor.json` `monitors`.
+You can create multiple trip groups (each with its own campground set, date range, and optional `discord_tag`), and each group is saved as a separate entry in `monitor.json` `monitors`.
 ```
 
 ### Direct CLI mode (single range)

@@ -79,16 +79,18 @@ function isoDateFromDisplay(displayDate) {
 
 function normalizeGroup(group) {
   const ids = Array.from(new Set(group.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)))).sort((a, b) => a - b);
+  const discordTag = String(group.discord_tag || "").trim();
   return {
     campground_ids: ids,
     check_in: String(group.check_in || "").trim(),
     check_out: String(group.check_out || "").trim(),
+    discord_tag: discordTag,
   };
 }
 
 function groupIdentity(group) {
   const g = normalizeGroup(group);
-  return `${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}`;
+  return `${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}|${g.discord_tag}`;
 }
 
 function shortDate(displayDate) {
@@ -162,12 +164,18 @@ function buildAutoCommitMessage() {
 
     const addedIds = [...nextIds].filter((id) => !prevIds.has(id));
     const removedIds = [...prevIds].filter((id) => !nextIds.has(id));
-    if (addedIds.length === 0 && removedIds.length === 0) continue;
+    const tagChanged = prevGroup.discord_tag !== nextGroup.discord_tag;
+    if (addedIds.length === 0 && removedIds.length === 0 && !tagChanged) continue;
 
     const range = `${shortDate(prevGroup.check_in)}-${shortDate(prevGroup.check_out)}`;
     const parts = [];
     if (addedIds.length > 0) parts.push(`Added ${listNamesFromIds(addedIds)}`);
     if (removedIds.length > 0) parts.push(`Removed ${listNamesFromIds(removedIds)}`);
+    if (tagChanged) {
+      const beforeTag = prevGroup.discord_tag || "(none)";
+      const afterTag = nextGroup.discord_tag || "(none)";
+      parts.push(`Tag ${beforeTag} -> ${afterTag}`);
+    }
     detailedUpdates.push(`Updated ${range} trip group: ${parts.join("; ")}`);
   }
 
@@ -231,7 +239,8 @@ function refreshTripGroupsList() {
     const suffix = g.campground_ids.length > 3 ? `, +${g.campground_ids.length - 3} more` : "";
     const opt = document.createElement("option");
     opt.value = String(idx);
-    opt.textContent = `Trip ${idx + 1}: ${g.check_in} to ${g.check_out} | ${names.join(", ")}${suffix}`;
+    const tagPart = g.discord_tag ? ` | tag: ${g.discord_tag}` : "";
+    opt.textContent = `Trip ${idx + 1}: ${g.check_in} to ${g.check_out} | ${names.join(", ")}${suffix}${tagPart}`;
     list.appendChild(opt);
   });
   const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
@@ -244,10 +253,12 @@ function currentGroupFromInputs() {
   if (!checkInIso || !checkOutIso) return null;
   if (checkOutIso <= checkInIso) return null;
   if (state.selectedIds.length === 0) return null;
+  const discordTag = el("discordTag").value.trim();
   return {
     campground_ids: [...state.selectedIds],
     check_in: currentDisplayDate(checkInIso),
     check_out: currentDisplayDate(checkOutIso),
+    discord_tag: discordTag,
   };
 }
 
@@ -483,6 +494,7 @@ async function onLoad() {
             campground_ids: m.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)),
             check_in: toDisplayDate(m.check_in),
             check_out: toDisplayDate(m.check_out),
+            discord_tag: typeof m.discord_tag === "string" ? m.discord_tag.trim() : "",
           }))
           .filter((m) => m.campground_ids.length > 0)
       : [];
@@ -493,9 +505,11 @@ async function onLoad() {
     if (state.tripGroups.length) {
       el("checkIn").value = isoDateFromDisplay(state.tripGroups[0].check_in);
       el("checkOut").value = isoDateFromDisplay(state.tripGroups[0].check_out);
+      el("discordTag").value = state.tripGroups[0].discord_tag || "";
     } else {
       el("checkIn").value = "";
       el("checkOut").value = "";
+      el("discordTag").value = "";
     }
 
     refreshSelectedList();
@@ -517,6 +531,7 @@ async function onSave() {
       campground_ids: g.campground_ids,
       check_in: toStorageDate(g.check_in),
       check_out: toStorageDate(g.check_out),
+      ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
     }));
     const payload = { monitors, poll_seconds: poll };
 
@@ -588,6 +603,7 @@ function loadTripGroup() {
   state.selectedIds = [...group.campground_ids];
   el("checkIn").value = isoDateFromDisplay(group.check_in);
   el("checkOut").value = isoDateFromDisplay(group.check_out);
+  el("discordTag").value = group.discord_tag || "";
   refreshSelectedList();
   status(`Loaded trip group #${idx + 1}.`);
 }
@@ -625,6 +641,7 @@ function bindEvents() {
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
   bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
   bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
+  bindIfPresent("discordTag", "input", autoUpdateActiveTripGroup);
   bindIfPresent("availableList", "change", () => {
     const ids = selectedValues(el("availableList"));
     if (ids.length) updatePreview(ids[0]);

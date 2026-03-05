@@ -47,6 +47,7 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
                         "campground_ids": [256892],
                         "check_in": "2026-03-05",
                         "check_out": "2026-03-07",
+                        "discord_tag": "@user1",
                     },
                     {
                         "campground_ids": [251869, 232492],
@@ -66,8 +67,10 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
     assert len(monitors) == 2
     assert monitors[0].campground_ids == ["256892"]
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
+    assert monitors[0].discord_tag == "@user1"
     assert monitors[1].campground_ids == ["251869", "232492"]
     assert monitors[1].requested_dates == {date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)}
+    assert monitors[1].discord_tag is None
 
 
 def test_is_rate_limited_error_detects_429() -> None:

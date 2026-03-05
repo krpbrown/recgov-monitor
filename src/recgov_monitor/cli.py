@@ -27,6 +27,7 @@ from recgov_monitor.recreation import (
 class MonitorRequest:
     campground_ids: list[str]
     requested_dates: set[date]
+    discord_tag: str | None = None
 
 
 def parse_campground_ids(campground_ids_csv: str) -> list[str]:
@@ -315,6 +316,7 @@ def load_monitor_requests(
         campground_ids = item.get("campground_ids")
         check_in = item.get("check_in")
         check_out = item.get("check_out")
+        discord_tag_raw = item.get("discord_tag")
 
         if not isinstance(campground_ids, list) or not all(
             isinstance(v, (str, int)) for v in campground_ids
@@ -324,11 +326,15 @@ def load_monitor_requests(
             raise ValueError("'campground_ids' must be a non-empty list of ids.")
         if not isinstance(check_in, str) or not isinstance(check_out, str):
             raise ValueError("'check_in' and 'check_out' must be date strings (YYYY-MM-DD).")
+        if discord_tag_raw is not None and not isinstance(discord_tag_raw, str):
+            raise ValueError("'discord_tag' must be a string when provided.")
+        discord_tag = discord_tag_raw.strip() if isinstance(discord_tag_raw, str) else ""
 
         requests.append(
             MonitorRequest(
                 campground_ids=[str(v) for v in campground_ids],
                 requested_dates=parse_stay_dates(check_in, check_out),
+                discord_tag=discord_tag or None,
             )
         )
 
@@ -363,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--discord-logger-mention",
         default=os.getenv("DISCORD_LOGGER_MENTION"),
         help=(
-            "Optional mention text added to hourly status when >50% of interval queries fail. "
+            "Optional mention text added to hourly status when >50%% of interval queries fail. "
             "Defaults to DISCORD_LOGGER_MENTION env var."
         ),
     )
@@ -452,6 +458,7 @@ def run_once(
                         campground_name,
                         all_matches,
                         requested_dates=monitor.requested_dates,
+                        mention=monitor.discord_tag,
                         log_message=discord_log,
                     )
                 except RuntimeError as exc:

@@ -22,6 +22,7 @@ class DiscordNotifier:
         campground_name: str,
         matches: list[AvailabilityMatch],
         requested_dates: set[date] | None = None,
+        mention: str | None = None,
         log_message: Callable[[str], None] | None = None,
     ) -> None:
         if not matches:
@@ -80,6 +81,10 @@ class DiscordNotifier:
                 f"- Site: {match.campsite_name} | Status: {status} | Dates: {short_dates}"
                 f"{coverage} | Reserve: <{reserve_url}>"
             )
+
+        mention_prefix = mention.strip() if mention else ""
+        if mention_prefix:
+            header = f"{mention_prefix} {header}"
 
         for content in _build_discord_message_chunks(header, lines):
             if log_message is not None:

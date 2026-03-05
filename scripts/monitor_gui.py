@@ -123,6 +123,7 @@ class MonitorEditorApp:
         self.search_var = tk.StringVar()
         self.check_in_var = tk.StringVar()
         self.check_out_var = tk.StringVar()
+        self.discord_tag_var = tk.StringVar()
         self.webhook_var = tk.StringVar()
         self.poll_var = tk.StringVar(value="60")
         self.status_var = tk.StringVar(value="Ready.")
@@ -258,6 +259,10 @@ class MonitorEditorApp:
         check_out_entry.bind(
             "<Button-1>",
             lambda _event: self._open_date_range_picker(),
+        )
+        ttk.Label(options, text="Discord tag (optional)").grid(row=1, column=0, sticky="w", pady=(8, 0))
+        ttk.Entry(options, textvariable=self.discord_tag_var, width=24).grid(
+            row=1, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(8, 0)
         )
         ttk.Button(
             options,
@@ -455,6 +460,7 @@ class MonitorEditorApp:
         self.trip_groups_listbox.delete(0, tk.END)
         for idx, group in enumerate(self.trip_groups, start=1):
             campground_ids = [int(v) for v in group.get("campground_ids", [])]
+            discord_tag = str(group.get("discord_tag", "")).strip()
             names: list[str] = []
             for campground_id in campground_ids[:3]:
                 campground = self.campground_by_id.get(campground_id)
@@ -466,11 +472,12 @@ class MonitorEditorApp:
             if len(campground_ids) > 3:
                 suffix = f", +{len(campground_ids) - 3} more"
             summary = ", ".join(names) + suffix if names else "(no campgrounds)"
+            tag_suffix = f" | tag: {discord_tag}" if discord_tag else ""
             self.trip_groups_listbox.insert(
                 tk.END,
                 (
                     f"Trip {idx}: {group.get('check_in', '')} to {group.get('check_out', '')} "
-                    f"| {summary}"
+                    f"| {summary}{tag_suffix}"
                 ),
             )
 
@@ -493,6 +500,7 @@ class MonitorEditorApp:
             "campground_ids": list(self.selected_ids),
             "check_in": check_in,
             "check_out": check_out,
+            "discord_tag": self.discord_tag_var.get().strip(),
         }
 
         if self.active_trip_group_index is None:
@@ -514,6 +522,7 @@ class MonitorEditorApp:
         self.active_trip_group_index = None
         self.check_in_var.set("")
         self.check_out_var.set("")
+        self.discord_tag_var.set("")
         self._refresh_selected_list()
         self.trip_groups_listbox.selection_clear(0, tk.END)
         self.status_var.set("Cleared current trip selection.")
@@ -550,6 +559,7 @@ class MonitorEditorApp:
         self.selected_ids = selected_ids
         self.check_in_var.set(str(group.get("check_in", "")))
         self.check_out_var.set(str(group.get("check_out", "")))
+        self.discord_tag_var.set(str(group.get("discord_tag", "")))
         self._refresh_selected_list()
         self.status_var.set(f"Loaded trip group #{index + 1} into current selection.")
 
@@ -859,6 +869,7 @@ class MonitorEditorApp:
                         "campground_ids": campground_ids,
                         "check_in": storage_to_display_date(check_in),
                         "check_out": storage_to_display_date(check_out),
+                        "discord_tag": str(item.get("discord_tag", "")).strip(),
                     }
                 )
 
@@ -937,6 +948,11 @@ class MonitorEditorApp:
                     "campground_ids": campground_ids,
                     "check_in": check_in_storage,
                     "check_out": check_out_storage,
+                    **(
+                        {"discord_tag": str(group.get("discord_tag", "")).strip()}
+                        if str(group.get("discord_tag", "")).strip()
+                        else {}
+                    ),
                 }
             )
 
@@ -962,6 +978,11 @@ class MonitorEditorApp:
                     "campground_ids": self.selected_ids,
                     "check_in": check_in_storage,
                     "check_out": check_out_storage,
+                    **(
+                        {"discord_tag": self.discord_tag_var.get().strip()}
+                        if self.discord_tag_var.get().strip()
+                        else {}
+                    ),
                 }
             )
 
