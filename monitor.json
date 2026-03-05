@@ -9,7 +9,8 @@
         258795
       ],
       "check_in": "2026-07-02",
-      "check_out": "2026-07-05"
+      "check_out": "2026-07-05",
+      "discord_tag": "@kpb17"
     },
     {
       "campground_ids": [
@@ -20,7 +21,8 @@
         10088563
       ],
       "check_in": "2026-06-18",
-      "check_out": "2026-06-20"
+      "check_out": "2026-06-20",
+      "discord_tag": "@kpb17"
     }
   ],
   "poll_seconds": 60
