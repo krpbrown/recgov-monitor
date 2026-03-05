@@ -60,6 +60,18 @@ function toStorageDate(displayDate) {
   return `${y}-${m}-${d}`;
 }
 
+function toStorageDateSafe(displayDate) {
+  const parts = String(displayDate || "").split("-");
+  if (parts.length !== 3) return "";
+  const [m, d, y] = parts;
+  if (!/^\d{2}$/.test(m) || !/^\d{2}$/.test(d) || !/^\d{4}$/.test(y)) return "";
+  const month = Number(m);
+  const day = Number(d);
+  const year = Number(y);
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900) return "";
+  return `${y}-${m}-${d}`;
+}
+
 function renderLabel(item) {
   const location = [item.park || "", item.state || ""].filter(Boolean).join(" - ");
   return location ? `${item.name} (${item.id}) - ${location}` : `${item.name} (${item.id})`;
@@ -237,10 +249,12 @@ function refreshTripGroupsList() {
   state.tripGroups.forEach((g, idx) => {
     const names = g.campground_ids.slice(0, 3).map((id) => (byId[id] ? byId[id].name : String(id)));
     const suffix = g.campground_ids.length > 3 ? `, +${g.campground_ids.length - 3} more` : "";
+    const namesText = names.length ? `${names.join(", ")}${suffix}` : "(no campgrounds yet)";
+    const rangeText = g.check_in && g.check_out ? `${g.check_in} to ${g.check_out}` : "dates not set";
     const opt = document.createElement("option");
     opt.value = String(idx);
     const tagPart = g.discord_tag ? ` | tag: ${g.discord_tag}` : "";
-    opt.textContent = `Trip ${idx + 1}: ${g.check_in} to ${g.check_out} | ${names.join(", ")}${suffix}${tagPart}`;
+    opt.textContent = `Trip ${idx + 1}: ${rangeText} | ${namesText}${tagPart}`;
     list.appendChild(opt);
   });
   const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
@@ -527,12 +541,24 @@ async function onSave() {
     const poll = Number(state.monitorPollSeconds);
     if (!Number.isInteger(poll) || poll < 0) throw new Error("poll_seconds must be a non-negative integer.");
 
-    const monitors = state.tripGroups.map((g) => ({
-      campground_ids: g.campground_ids,
-      check_in: toStorageDate(g.check_in),
-      check_out: toStorageDate(g.check_out),
-      ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
-    }));
+    const monitors = state.tripGroups
+      .map((g) => {
+        const checkIn = toStorageDateSafe(g.check_in);
+        const checkOut = toStorageDateSafe(g.check_out);
+        if (!checkIn || !checkOut || checkOut <= checkIn || !Array.isArray(g.campground_ids) || g.campground_ids.length === 0) {
+          return null;
+        }
+        return {
+          campground_ids: g.campground_ids,
+          check_in: checkIn,
+          check_out: checkOut,
+          ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
+        };
+      })
+      .filter((m) => m !== null);
+    if (monitors.length === 0) {
+      throw new Error("Add at least one complete trip group (dates + campground) before saving.");
+    }
     const payload = { monitors, poll_seconds: poll };
 
     const monitorPath = el("monitorPath").value.trim();
@@ -583,16 +609,22 @@ function removeSelected() {
   autoUpdateActiveTripGroup();
 }
 
-function addTripGroup() {
-  const group = currentGroupFromInputs();
-  if (!group) {
-    return status("Set valid check-in/check-out and at least one campground before adding a trip group.");
-  }
-  state.tripGroups.push(group);
+function newTripGroup() {
+  state.tripGroups.push({
+    campground_ids: [],
+    check_in: "",
+    check_out: "",
+    discord_tag: "",
+  });
   state.activeTripIndex = state.tripGroups.length - 1;
+  state.selectedIds = [];
+  el("checkIn").value = "";
+  el("checkOut").value = "";
+  el("discordTag").value = "";
+  refreshSelectedList();
   refreshTripGroupsList();
   el("tripGroupsList").value = String(state.activeTripIndex);
-  status(`Added trip group #${state.tripGroups.length}.`);
+  status(`Created blank trip group #${state.tripGroups.length}.`);
 }
 
 function loadTripGroup() {
@@ -636,7 +668,7 @@ function bindEvents() {
   bindIfPresent("search", "input", refreshAvailableList);
   bindIfPresent("addBtn", "click", addSelected);
   bindIfPresent("removeBtn", "click", removeSelected);
-  bindIfPresent("newTripBtn", "click", addTripGroup);
+  bindIfPresent("newTripBtn", "click", newTripGroup);
   bindIfPresent("loadTripBtn", "click", loadTripGroup);
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
   bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
