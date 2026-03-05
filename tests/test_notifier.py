@@ -237,3 +237,35 @@ def test_notify_prepends_mention_when_provided() -> None:
     _, payload = stub.calls[0]
     content = payload["content"]
     assert content.startswith("@user1 Availability found for Simpson Springs Campground (256892)")
+
+
+def test_notify_converts_numeric_user_id_to_discord_mention() -> None:
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def post_json(self, url: str, payload: dict) -> None:
+            self.calls.append((url, payload))
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/123456/abcdef")
+    stub = StubClient()
+    notifier.client = stub  # type: ignore[assignment]
+
+    notifier.notify(
+        campground_id="256892",
+        campground_name="Simpson Springs Campground",
+        matches=[
+            AvailabilityMatch(
+                campsite_id="10019342",
+                campsite_name="001",
+                date=date(2026, 3, 5),
+                status="Available",
+            )
+        ],
+        mention="123456789012345678",
+    )
+
+    assert len(stub.calls) == 1
+    _, payload = stub.calls[0]
+    content = payload["content"]
+    assert content.startswith("<@123456789012345678> Availability found for Simpson Springs Campground (256892)")

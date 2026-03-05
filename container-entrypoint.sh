@@ -13,6 +13,7 @@ MONITOR_SYNC_INTERVAL_SECONDS="${MONITOR_SYNC_INTERVAL_SECONDS:-300}"
 MONITOR_SYNC_AT_STARTUP="${MONITOR_SYNC_AT_STARTUP:-1}"
 MONITOR_SYNC_ETAG_FILE="${MONITOR_SYNC_ETAG_FILE:-/data/.monitor_sync.etag}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+MAIN_PID="$$"
 
 refresh_pid=""
 monitor_pid=""
@@ -63,6 +64,18 @@ refresh_loop() {
 }
 
 request_monitor_restart() {
+  if [ "$$" = "$MAIN_PID" ]; then
+    restart_requested="1"
+    if [ -n "$monitor_pid" ]; then
+      kill "$monitor_pid" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  kill -USR1 "$MAIN_PID" 2>/dev/null || true
+}
+
+handle_restart_signal() {
+  log "[sync] Restart signal received."
   restart_requested="1"
   if [ -n "$monitor_pid" ]; then
     kill "$monitor_pid" 2>/dev/null || true
@@ -100,6 +113,8 @@ token = sys.argv[2]
 out_path = pathlib.Path(sys.argv[3])
 etag_path = pathlib.Path(sys.argv[4])
 headers = {"User-Agent": "recgov-monitor-container/1.0"}
+headers["Cache-Control"] = "no-cache"
+headers["Pragma"] = "no-cache"
 if token:
     headers["Authorization"] = f"Bearer {token}"
 if etag_path.exists():
@@ -180,6 +195,7 @@ cleanup() {
 }
 
 trap cleanup INT TERM
+trap handle_restart_signal USR1
 
 if [ "$AUTO_REFRESH_CAMPGROUNDS" = "1" ]; then
   if [ "$REFRESH_AT_STARTUP" = "1" ] || [ ! -s "$CAMPGROUNDS_FILE" ]; then

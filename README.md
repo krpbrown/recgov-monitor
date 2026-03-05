@@ -149,7 +149,9 @@ Notes:
 
 `poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
 Campground names are now loaded from an exported RIDB JSON file (default path: `campgrounds.json`).
-Each monitor entry can optionally include `discord_tag` (for example `@username` or `<@123456789012345678>`), which is prepended to Discord availability alerts for that specific trip group.
+Each monitor entry can optionally include `discord_tag` (recommended: `<@123456789012345678>` user mention, `<@&role_id>` role mention, or numeric user ID), which is prepended to Discord availability alerts for that specific trip group.
+Plain `@username` text may render but often does not generate a real ping from webhooks.
+To get a numeric user ID quickly, type a mention with a leading backslash in Discord (for example `\@kpb17`) and Discord will print the raw mention form (for example `<@312027909042864130>`).
 
 Run:
 

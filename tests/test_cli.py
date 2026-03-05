@@ -8,6 +8,7 @@ from recgov_monitor.cli import (
     compute_sleep_seconds,
     format_poll_timestamp,
     is_rate_limited_error,
+    looks_like_plain_username_tag,
     load_campground_catalog,
     load_monitor_requests,
     parse_campground_ids,
@@ -98,6 +99,13 @@ def test_compute_sleep_seconds_keeps_non_60_polls_unchanged() -> None:
 def test_format_poll_timestamp_matches_expected_style() -> None:
     stamp = format_poll_timestamp(now=datetime(2026, 2, 20, 18, 5, 5))
     assert stamp == "2/20/26 6:05:05 PM"
+
+
+def test_looks_like_plain_username_tag_identifies_non_ping_style() -> None:
+    assert looks_like_plain_username_tag("@kpb17")
+    assert not looks_like_plain_username_tag("<@123456789012345678>")
+    assert not looks_like_plain_username_tag("123456789012345678")
+    assert not looks_like_plain_username_tag("@everyone")
 
 
 def test_parser_uses_discord_webhook_env_var(monkeypatch: pytest.MonkeyPatch) -> None:

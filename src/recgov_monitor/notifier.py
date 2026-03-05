@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from typing import Callable
 from urllib.parse import urlparse
@@ -82,7 +83,7 @@ class DiscordNotifier:
                 f"{coverage} | Reserve: <{reserve_url}>"
             )
 
-        mention_prefix = mention.strip() if mention else ""
+        mention_prefix = _normalize_discord_mention(mention)
         if mention_prefix:
             header = f"{mention_prefix} {header}"
 
@@ -140,6 +141,24 @@ def _group_matches_by_campsite(matches: list[AvailabilityMatch]) -> list[_Groupe
         entry.dates.add(match.date)
 
     return sorted(grouped.values(), key=lambda item: item.campsite_name)
+
+
+def _normalize_discord_mention(raw: str | None) -> str:
+    if not raw:
+        return ""
+    value = raw.strip()
+    if not value:
+        return ""
+    if value in {"@everyone", "@here"}:
+        return value
+    if re.fullmatch(r"<@!?\d{17,20}>", value):
+        return value
+    if re.fullmatch(r"<@&\d{17,20}>", value):
+        return value
+    if re.fullmatch(r"@?\d{17,20}", value):
+        user_id = value[1:] if value.startswith("@") else value
+        return f"<@{user_id}>"
+    return value
 
 
 def validate_discord_webhook_url(webhook_url: str) -> None:

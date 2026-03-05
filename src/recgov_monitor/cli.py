@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -85,6 +86,21 @@ def format_requested_date_span(requested_dates: set[date]) -> str:
     check_in = min(requested_dates)
     check_out = max(requested_dates) + timedelta(days=1)
     return f"{check_in.isoformat()} to {check_out.isoformat()}"
+
+
+def looks_like_plain_username_tag(tag: str | None) -> bool:
+    if not tag:
+        return False
+    value = tag.strip()
+    if not value or value in {"@everyone", "@here"}:
+        return False
+    if re.fullmatch(r"<@!?\d{17,20}>", value):
+        return False
+    if re.fullmatch(r"<@&\d{17,20}>", value):
+        return False
+    if re.fullmatch(r"@?\d{17,20}", value):
+        return False
+    return value.startswith("@")
 
 
 class _RunLogger:
@@ -532,6 +548,13 @@ def main() -> int:
     )
     logger = _RunLogger(Path(args.log_file))
     logger.info(f"Logging to {args.log_file}")
+    for trip_index, monitor in enumerate(monitors, start=1):
+        if looks_like_plain_username_tag(monitor.discord_tag):
+            logger.info(
+                "Warning: "
+                f"trip {trip_index} uses discord_tag '{monitor.discord_tag}', which may not ping via webhook. "
+                "Use a user mention like <@123456789012345678> (or a numeric user ID)."
+            )
     status_reporter = _StatusReporter(
         webhook_url=logger_webhook_url,
         mention=logger_mention,
