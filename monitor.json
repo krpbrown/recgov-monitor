@@ -3,14 +3,14 @@
     {
       "campground_ids": [
         251869,
-        10171274,
         258796,
         10363618,
         258795
       ],
       "check_in": "2026-07-02",
       "check_out": "2026-07-05",
-      "discord_tag": "312027909042864130"
+      "discord_tag": "312027909042864130",
+      "full_matches_only": true
     },
     {
       "campground_ids": [
