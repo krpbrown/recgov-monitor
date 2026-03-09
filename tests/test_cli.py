@@ -7,6 +7,7 @@ from recgov_monitor.cli import (
     build_parser,
     compute_sleep_seconds,
     format_poll_timestamp,
+    has_full_site_match,
     is_rate_limited_error,
     looks_like_plain_username_tag,
     load_campground_catalog,
@@ -14,6 +15,7 @@ from recgov_monitor.cli import (
     parse_campground_ids,
     parse_stay_dates,
 )
+from recgov_monitor.models import AvailabilityMatch
 
 
 def test_parse_campground_ids_parses_csv() -> None:
@@ -49,6 +51,7 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
                         "check_in": "2026-03-05",
                         "check_out": "2026-03-07",
                         "discord_tag": "@user1",
+                        "full_matches_only": True,
                     },
                     {
                         "campground_ids": [251869, 232492],
@@ -69,9 +72,11 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
     assert monitors[0].campground_ids == ["256892"]
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
     assert monitors[0].discord_tag == "@user1"
+    assert monitors[0].full_matches_only is True
     assert monitors[1].campground_ids == ["251869", "232492"]
     assert monitors[1].requested_dates == {date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)}
     assert monitors[1].discord_tag is None
+    assert monitors[1].full_matches_only is False
 
 
 def test_is_rate_limited_error_detects_429() -> None:
@@ -192,3 +197,41 @@ def test_load_campground_catalog_reads_name_mapping(tmp_path) -> None:
 
     names = load_campground_catalog(str(catalog_path))
     assert names == {"256892": "Simpson Springs Campground"}
+
+
+def test_has_full_site_match_detects_full_coverage() -> None:
+    requested = {date(2026, 6, 18), date(2026, 6, 19)}
+    matches = [
+        AvailabilityMatch(
+            campsite_id="1001",
+            campsite_name="001",
+            date=date(2026, 6, 18),
+            status="Available",
+        ),
+        AvailabilityMatch(
+            campsite_id="1001",
+            campsite_name="001",
+            date=date(2026, 6, 19),
+            status="Available",
+        ),
+    ]
+    assert has_full_site_match(matches, requested)
+
+
+def test_has_full_site_match_rejects_partial_only() -> None:
+    requested = {date(2026, 6, 18), date(2026, 6, 19)}
+    matches = [
+        AvailabilityMatch(
+            campsite_id="1001",
+            campsite_name="001",
+            date=date(2026, 6, 18),
+            status="Available",
+        ),
+        AvailabilityMatch(
+            campsite_id="1002",
+            campsite_name="002",
+            date=date(2026, 6, 19),
+            status="Available",
+        ),
+    ]
+    assert not has_full_site_match(matches, requested)

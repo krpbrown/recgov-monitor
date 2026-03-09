@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from urllib import parse, request
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 
 class HttpClient:
@@ -24,6 +24,8 @@ class HttpClient:
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"GET request failed: {exc.code} {body}") from exc
+        except (URLError, OSError) as exc:
+            raise RuntimeError(f"GET request failed: {exc}") from exc
 
     def post_json(self, url: str, payload: dict) -> None:
         data = json.dumps(payload).encode("utf-8")
@@ -42,3 +44,5 @@ class HttpClient:
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Webhook request failed: {exc.code} {body}") from exc
+        except (URLError, OSError) as exc:
+            raise RuntimeError(f"Webhook request failed: {exc}") from exc

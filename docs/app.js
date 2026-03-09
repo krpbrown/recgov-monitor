@@ -92,17 +92,19 @@ function isoDateFromDisplay(displayDate) {
 function normalizeGroup(group) {
   const ids = Array.from(new Set(group.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)))).sort((a, b) => a - b);
   const discordTag = String(group.discord_tag || "").trim();
+  const fullMatchesOnly = !!group.full_matches_only;
   return {
     campground_ids: ids,
     check_in: String(group.check_in || "").trim(),
     check_out: String(group.check_out || "").trim(),
     discord_tag: discordTag,
+    full_matches_only: fullMatchesOnly,
   };
 }
 
 function groupIdentity(group) {
   const g = normalizeGroup(group);
-  return `${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}|${g.discord_tag}`;
+  return `${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}|${g.discord_tag}|${g.full_matches_only ? 1 : 0}`;
 }
 
 function shortDate(displayDate) {
@@ -254,7 +256,8 @@ function refreshTripGroupsList() {
     const opt = document.createElement("option");
     opt.value = String(idx);
     const tagPart = g.discord_tag ? ` | tag: ${g.discord_tag}` : "";
-    opt.textContent = `Trip ${idx + 1}: ${rangeText} | ${namesText}${tagPart}`;
+    const modePart = g.full_matches_only ? " | full-only" : "";
+    opt.textContent = `Trip ${idx + 1}: ${rangeText} | ${namesText}${tagPart}${modePart}`;
     list.appendChild(opt);
   });
   const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
@@ -268,11 +271,13 @@ function currentGroupFromInputs() {
   if (checkOutIso <= checkInIso) return null;
   if (state.selectedIds.length === 0) return null;
   const discordTag = el("discordTag").value.trim();
+  const fullMatchesOnly = !!el("fullMatchesOnly").checked;
   return {
     campground_ids: [...state.selectedIds],
     check_in: currentDisplayDate(checkInIso),
     check_out: currentDisplayDate(checkOutIso),
     discord_tag: discordTag,
+    full_matches_only: fullMatchesOnly,
   };
 }
 
@@ -509,6 +514,7 @@ async function onLoad() {
             check_in: toDisplayDate(m.check_in),
             check_out: toDisplayDate(m.check_out),
             discord_tag: typeof m.discord_tag === "string" ? m.discord_tag.trim() : "",
+            full_matches_only: !!m.full_matches_only,
           }))
           .filter((m) => m.campground_ids.length > 0)
       : [];
@@ -520,10 +526,12 @@ async function onLoad() {
       el("checkIn").value = isoDateFromDisplay(state.tripGroups[0].check_in);
       el("checkOut").value = isoDateFromDisplay(state.tripGroups[0].check_out);
       el("discordTag").value = state.tripGroups[0].discord_tag || "";
+      el("fullMatchesOnly").checked = !!state.tripGroups[0].full_matches_only;
     } else {
       el("checkIn").value = "";
       el("checkOut").value = "";
       el("discordTag").value = "";
+      el("fullMatchesOnly").checked = false;
     }
 
     refreshSelectedList();
@@ -553,6 +561,7 @@ async function onSave() {
           check_in: checkIn,
           check_out: checkOut,
           ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
+          ...(g.full_matches_only ? { full_matches_only: true } : {}),
         };
       })
       .filter((m) => m !== null);
@@ -615,12 +624,14 @@ function newTripGroup() {
     check_in: "",
     check_out: "",
     discord_tag: "",
+    full_matches_only: false,
   });
   state.activeTripIndex = state.tripGroups.length - 1;
   state.selectedIds = [];
   el("checkIn").value = "";
   el("checkOut").value = "";
   el("discordTag").value = "";
+  el("fullMatchesOnly").checked = false;
   refreshSelectedList();
   refreshTripGroupsList();
   el("tripGroupsList").value = String(state.activeTripIndex);
@@ -636,6 +647,7 @@ function loadTripGroup() {
   el("checkIn").value = isoDateFromDisplay(group.check_in);
   el("checkOut").value = isoDateFromDisplay(group.check_out);
   el("discordTag").value = group.discord_tag || "";
+  el("fullMatchesOnly").checked = !!group.full_matches_only;
   refreshSelectedList();
   status(`Loaded trip group #${idx + 1}.`);
 }
@@ -674,6 +686,7 @@ function bindEvents() {
   bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
   bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
   bindIfPresent("discordTag", "input", autoUpdateActiveTripGroup);
+  bindIfPresent("fullMatchesOnly", "change", autoUpdateActiveTripGroup);
   bindIfPresent("availableList", "change", () => {
     const ids = selectedValues(el("availableList"));
     if (ids.length) updatePreview(ids[0]);

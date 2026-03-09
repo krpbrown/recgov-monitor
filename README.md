@@ -136,7 +136,8 @@ Notes:
       "campground_ids": [256892],
       "check_in": "2026-03-05",
       "check_out": "2026-03-07",
-      "discord_tag": "@user1"
+      "discord_tag": "@user1",
+      "full_matches_only": true
     },
     {
       "campground_ids": [251869, 232492],
@@ -152,6 +153,7 @@ Campground names are now loaded from an exported RIDB JSON file (default path: `
 Each monitor entry can optionally include `discord_tag` (recommended: `<@123456789012345678>` user mention, `<@&role_id>` role mention, or numeric user ID), which is prepended to Discord availability alerts for that specific trip group.
 Plain `@username` text may render but often does not generate a real ping from webhooks.
 To get a numeric user ID quickly, type a mention with a leading backslash in Discord (for example `\@kpb17`) and Discord will print the raw mention form (for example `<@312027909042864130>`).
+Each monitor entry can also include optional `full_matches_only` (boolean). When `true`, alerts are sent only when at least one campsite covers all requested nights; partial-only availability is logged but not notified.
 
 Run:
 
@@ -197,7 +199,7 @@ python scripts/monitor_gui.py --campgrounds-file campgrounds.json --monitor-file
 The GUI lets you search and select one or more campgrounds, set check-in/check-out dates, and save.
 Search matches campground name, campground ID, and park name.
 When you click a campground, the GUI attempts to load a campground image using RIDB facility media.
-You can create multiple trip groups (each with its own campground set, date range, and optional `discord_tag`), and each group is saved as a separate entry in `monitor.json` `monitors`.
+You can create multiple trip groups (each with its own campground set, date range, optional `discord_tag`, and optional `full_matches_only`), and each group is saved as a separate entry in `monitor.json` `monitors`.
 ```
 
 ### Direct CLI mode (single range)

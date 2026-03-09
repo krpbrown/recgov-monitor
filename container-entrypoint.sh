@@ -106,6 +106,7 @@ download_monitor_to_temp() {
 import pathlib
 import sys
 from urllib.error import HTTPError
+from urllib.error import URLError
 from urllib import request
 
 url = sys.argv[1]
@@ -129,7 +130,14 @@ try:
 except HTTPError as exc:
     if exc.code == 304:
         raise SystemExit(3)
-    raise
+    print(f"[sync] Download failed with HTTP {exc.code}.", file=sys.stderr)
+    raise SystemExit(2)
+except URLError as exc:
+    print(f"[sync] Download failed: {exc}.", file=sys.stderr)
+    raise SystemExit(2)
+except OSError as exc:
+    print(f"[sync] Download failed: {exc}.", file=sys.stderr)
+    raise SystemExit(2)
 out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_bytes(data)
 if etag:

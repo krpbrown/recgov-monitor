@@ -29,6 +29,7 @@ class MonitorRequest:
     campground_ids: list[str]
     requested_dates: set[date]
     discord_tag: str | None = None
+    full_matches_only: bool = False
 
 
 def parse_campground_ids(campground_ids_csv: str) -> list[str]:
@@ -101,6 +102,19 @@ def looks_like_plain_username_tag(tag: str | None) -> bool:
     if re.fullmatch(r"@?\d{17,20}", value):
         return False
     return value.startswith("@")
+
+
+def has_full_site_match(matches: list[Any], requested_dates: set[date]) -> bool:
+    if not matches or not requested_dates:
+        return False
+    by_site: dict[str, set[date]] = {}
+    for match in matches:
+        site_id = getattr(match, "campsite_id", "")
+        day = getattr(match, "date", None)
+        if not site_id or day is None:
+            continue
+        by_site.setdefault(str(site_id), set()).add(day)
+    return any(requested_dates.issubset(days) for days in by_site.values())
 
 
 class _RunLogger:
@@ -333,6 +347,7 @@ def load_monitor_requests(
         check_in = item.get("check_in")
         check_out = item.get("check_out")
         discord_tag_raw = item.get("discord_tag")
+        full_matches_only_raw = item.get("full_matches_only")
 
         if not isinstance(campground_ids, list) or not all(
             isinstance(v, (str, int)) for v in campground_ids
@@ -344,6 +359,8 @@ def load_monitor_requests(
             raise ValueError("'check_in' and 'check_out' must be date strings (YYYY-MM-DD).")
         if discord_tag_raw is not None and not isinstance(discord_tag_raw, str):
             raise ValueError("'discord_tag' must be a string when provided.")
+        if full_matches_only_raw is not None and not isinstance(full_matches_only_raw, bool):
+            raise ValueError("'full_matches_only' must be a boolean when provided.")
         discord_tag = discord_tag_raw.strip() if isinstance(discord_tag_raw, str) else ""
 
         requests.append(
@@ -351,6 +368,7 @@ def load_monitor_requests(
                 campground_ids=[str(v) for v in campground_ids],
                 requested_dates=parse_stay_dates(check_in, check_out),
                 discord_tag=discord_tag or None,
+                full_matches_only=bool(full_matches_only_raw),
             )
         )
 
@@ -463,6 +481,13 @@ def run_once(
                     time.sleep(request_delay_seconds)
 
             if all_matches:
+                full_site_match = has_full_site_match(all_matches, monitor.requested_dates)
+                if monitor.full_matches_only and not full_site_match:
+                    info(
+                        f"Partial availability found for {campground_name}, but Trip {trip_index} "
+                        f"({date_span}) is full-matches-only. Skipping Discord alert."
+                    )
+                    continue
                 found_any = True
                 info(
                     f"Found {len(all_matches)} available campsite slot(s) for {campground_name}. "
