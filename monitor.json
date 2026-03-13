@@ -1,6 +1,7 @@
 {
   "monitors": [
     {
+      "type": "campground",
       "campground_ids": [
         251869,
         258796,
@@ -13,6 +14,7 @@
       "full_matches_only": true
     },
     {
+      "type": "campground",
       "campground_ids": [
         232447,
         232450,
@@ -25,6 +27,16 @@
       "check_out": "2026-06-27",
       "discord_tag": "1199842821746725027",
       "full_matches_only": true
+    },
+    {
+      "type": "ticket",
+      "ticket_facility_id": "251853",
+      "ticket_id": "10086943",
+      "ticket_name": "Lehman Caves Tour",
+      "ticket_facility_name": "Great Basin National Park",
+      "check_in": "2026-06-18",
+      "check_out": "2026-06-19",
+      "discord_tag": "<@312027909042864130>"
     }
   ],
   "poll_seconds": 60
