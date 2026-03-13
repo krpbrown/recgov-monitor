@@ -25,14 +25,6 @@
       "check_out": "2026-06-27",
       "discord_tag": "1199842821746725027",
       "full_matches_only": true
-    },
-    {
-      "campground_ids": [
-        10171274
-      ],
-      "check_in": "2026-06-16",
-      "check_out": "2026-06-20",
-      "discord_tag": "312027909042864130"
     }
   ],
   "poll_seconds": 60
