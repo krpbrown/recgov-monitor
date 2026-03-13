@@ -64,13 +64,8 @@ refresh_loop() {
 }
 
 request_monitor_restart() {
-  if [ "$$" = "$MAIN_PID" ]; then
-    restart_requested="1"
-    if [ -n "$monitor_pid" ]; then
-      kill "$monitor_pid" 2>/dev/null || true
-    fi
-    return 0
-  fi
+  # Always signal the main shell process. Background loops run in subshells, and
+  # relying on local variables there can miss live monitor_pid updates.
   kill -USR1 "$MAIN_PID" 2>/dev/null || true
 }
 

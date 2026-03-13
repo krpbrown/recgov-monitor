@@ -600,6 +600,7 @@ def main() -> int:
     )
     logger = _RunLogger(Path(args.log_file))
     logger.info(f"Logging to {args.log_file}")
+    logger.info(f"Loaded {len(monitors)} trip group(s) from config.")
     for trip_index, monitor in enumerate(monitors, start=1):
         if looks_like_plain_username_tag(monitor.discord_tag):
             logger.info(
