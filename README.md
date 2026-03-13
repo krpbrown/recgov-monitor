@@ -5,6 +5,7 @@
 ## Features
 
 - Query recreation.gov monthly availability API for one or more campgrounds.
+- Query recreation.gov ticket availability for ticketed tours/events.
 - Accept trip dates as check-in and check-out.
 - Support multiple monitor groups through a JSON config file.
 - Optional per-trip `discord_tag` so alerts can mention different users/roles per trip group.
@@ -109,7 +110,8 @@ This repo includes a static web editor in `docs/` for editing `monitor.json` in 
 4. Open the Pages editor URL (for example `https://<owner>.github.io/<repo>/editor/`)
 5. Enter repo/branch/path values and a fine-grained GitHub token
 6. Click **Load from GitHub**, edit trips, then **Save monitor.json to GitHub**
-7. For campground preview images in the editor, provide a RIDB API key in the page field.
+7. Optional: provide `tickets.json` path to manage ticketed tour/event trips in the same editor.
+8. For campground preview images in the editor, provide a RIDB API key in the page field.
 
 Token permissions:
 
@@ -154,6 +156,22 @@ Each monitor entry can optionally include `discord_tag` (recommended: `<@1234567
 Plain `@username` text may render but often does not generate a real ping from webhooks.
 To get a numeric user ID quickly, type a mention with a leading backslash in Discord (for example `\@kpb17`) and Discord will print the raw mention form (for example `<@312027909042864130>`).
 Each monitor entry can also include optional `full_matches_only` (boolean). When `true`, alerts are sent only when at least one campsite covers all requested nights; partial-only availability is logged but not notified.
+For ticketed tours/events, set `"type": "ticket"` with `ticket_facility_id` and `ticket_id` instead of `campground_ids`.
+
+Ticket monitor example:
+
+```json
+{
+  "type": "ticket",
+  "ticket_facility_id": 251853,
+  "ticket_id": 10086943,
+  "ticket_name": "Lehman Caves Tour",
+  "ticket_facility_name": "Great Basin National Park",
+  "check_in": "2026-06-10",
+  "check_out": "2026-06-12",
+  "discord_tag": "<@312027909042864130>"
+}
+```
 
 Run:
 

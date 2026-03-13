@@ -7,7 +7,7 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from recgov_monitor.http import HttpClient
-from recgov_monitor.models import AvailabilityMatch
+from recgov_monitor.models import AvailabilityMatch, TicketAvailabilityMatch
 
 DISCORD_CONTENT_MAX_LENGTH = 2000
 
@@ -92,6 +92,46 @@ class DiscordNotifier:
                 log_message(content)
             payload = {"content": content}
             self.client.post_json(self.webhook_url, payload)
+
+    def notify_ticket(
+        self,
+        facility_id: str,
+        facility_name: str,
+        ticket_id: str,
+        ticket_name: str,
+        matches: list[TicketAvailabilityMatch],
+        *,
+        mention: str | None = None,
+        log_message: Callable[[str], None] | None = None,
+    ) -> None:
+        if not matches:
+            return
+
+        header = (
+            f"Ticket availability found for {ticket_name} "
+            f"({ticket_id}) at {facility_name} ({facility_id})"
+        )
+        mention_prefix = _normalize_discord_mention(mention)
+        if mention_prefix:
+            header = f"{mention_prefix} {header}"
+
+        lines: list[str] = []
+        for match in matches:
+            remaining_text = (
+                f" | Remaining: {match.remaining}"
+                if match.remaining is not None
+                else ""
+            )
+            reserve_url = f"https://www.recreation.gov/ticket/{facility_id}/ticket/{ticket_id}"
+            lines.append(
+                f"- Date: {match.date.month}/{match.date.day}/{match.date.year} "
+                f"| Slot: {match.slot_label}{remaining_text} | Reserve: <{reserve_url}>"
+            )
+
+        for content in _build_discord_message_chunks(header, lines):
+            if log_message is not None:
+                log_message(content)
+            self.client.post_json(self.webhook_url, {"content": content})
 
 
 def _truncate_line(line: str, max_len: int) -> str:

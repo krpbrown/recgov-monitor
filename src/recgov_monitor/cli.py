@@ -21,15 +21,21 @@ from recgov_monitor.recreation import (
     RecreationGovClient,
     extract_campground_name,
     find_available_campsites,
+    find_available_ticket_slots,
 )
 
 
 @dataclass(frozen=True)
 class MonitorRequest:
+    monitor_type: str
     campground_ids: list[str]
     requested_dates: set[date]
     discord_tag: str | None = None
     full_matches_only: bool = False
+    ticket_facility_id: str | None = None
+    ticket_id: str | None = None
+    ticket_name: str | None = None
+    ticket_facility_name: str | None = None
 
 
 def parse_campground_ids(campground_ids_csv: str) -> list[str]:
@@ -125,6 +131,13 @@ def build_trip_summary(
     summary_lines: list[str] = []
     for trip_index, monitor in enumerate(monitors, start=1):
         date_span = format_requested_date_span(monitor.requested_dates)
+        if monitor.monitor_type == "ticket":
+            ticket_name = monitor.ticket_name or f"ticket {monitor.ticket_id or 'unknown'}"
+            facility_name = monitor.ticket_facility_name or f"facility {monitor.ticket_facility_id or 'unknown'}"
+            summary_lines.append(
+                f"Trip {trip_index} ({date_span}): Ticket {ticket_name} at {facility_name}"
+            )
+            continue
         names = [
             campground_names.get(campground_id, f"campground {campground_id}")
             for campground_id in monitor.campground_ids
@@ -370,32 +383,83 @@ def load_monitor_requests(
     for item in monitors:
         if not isinstance(item, dict):
             raise ValueError("Each monitor entry must be a mapping/object.")
+        monitor_type_raw = item.get("type", "campground")
+        if not isinstance(monitor_type_raw, str):
+            raise ValueError("'type' must be a string when provided.")
+        monitor_type = monitor_type_raw.strip().lower() or "campground"
+        if monitor_type not in {"campground", "ticket"}:
+            raise ValueError("'type' must be either 'campground' or 'ticket'.")
+
         campground_ids = item.get("campground_ids")
         check_in = item.get("check_in")
         check_out = item.get("check_out")
         discord_tag_raw = item.get("discord_tag")
         full_matches_only_raw = item.get("full_matches_only")
+        ticket_facility_id_raw = item.get("ticket_facility_id")
+        ticket_id_raw = item.get("ticket_id")
+        ticket_name_raw = item.get("ticket_name")
+        ticket_facility_name_raw = item.get("ticket_facility_name")
 
-        if not isinstance(campground_ids, list) or not all(
-            isinstance(v, (str, int)) for v in campground_ids
-        ):
-            raise ValueError("'campground_ids' must be a non-empty list of ids.")
-        if not campground_ids:
-            raise ValueError("'campground_ids' must be a non-empty list of ids.")
         if not isinstance(check_in, str) or not isinstance(check_out, str):
             raise ValueError("'check_in' and 'check_out' must be date strings (YYYY-MM-DD).")
         if discord_tag_raw is not None and not isinstance(discord_tag_raw, str):
             raise ValueError("'discord_tag' must be a string when provided.")
         if full_matches_only_raw is not None and not isinstance(full_matches_only_raw, bool):
             raise ValueError("'full_matches_only' must be a boolean when provided.")
+        if ticket_name_raw is not None and not isinstance(ticket_name_raw, str):
+            raise ValueError("'ticket_name' must be a string when provided.")
+        if ticket_facility_name_raw is not None and not isinstance(ticket_facility_name_raw, str):
+            raise ValueError("'ticket_facility_name' must be a string when provided.")
         discord_tag = discord_tag_raw.strip() if isinstance(discord_tag_raw, str) else ""
+        ticket_name = ticket_name_raw.strip() if isinstance(ticket_name_raw, str) else ""
+        ticket_facility_name = (
+            ticket_facility_name_raw.strip()
+            if isinstance(ticket_facility_name_raw, str)
+            else ""
+        )
+        requested_dates = parse_stay_dates(check_in, check_out)
+
+        campground_ids_parsed: list[str] = []
+        ticket_facility_id: str | None = None
+        ticket_id: str | None = None
+
+        if monitor_type == "campground":
+            if not isinstance(campground_ids, list) or not all(
+                isinstance(v, (str, int)) for v in campground_ids
+            ):
+                raise ValueError("'campground_ids' must be a non-empty list of ids.")
+            if not campground_ids:
+                raise ValueError("'campground_ids' must be a non-empty list of ids.")
+            campground_ids_parsed = [str(v) for v in campground_ids]
+        else:
+            if ticket_facility_id_raw is None or ticket_id_raw is None:
+                raise ValueError(
+                    "Ticket monitors require 'ticket_facility_id' and 'ticket_id'."
+                )
+            if not isinstance(ticket_facility_id_raw, (str, int)) or not isinstance(
+                ticket_id_raw, (str, int)
+            ):
+                raise ValueError(
+                    "'ticket_facility_id' and 'ticket_id' must be strings or integers."
+                )
+            ticket_facility_id = str(ticket_facility_id_raw).strip()
+            ticket_id = str(ticket_id_raw).strip()
+            if not ticket_facility_id or not ticket_id:
+                raise ValueError(
+                    "'ticket_facility_id' and 'ticket_id' must be non-empty."
+                )
 
         requests.append(
             MonitorRequest(
-                campground_ids=[str(v) for v in campground_ids],
-                requested_dates=parse_stay_dates(check_in, check_out),
+                monitor_type=monitor_type,
+                campground_ids=campground_ids_parsed,
+                requested_dates=requested_dates,
                 discord_tag=discord_tag or None,
                 full_matches_only=bool(full_matches_only_raw),
+                ticket_facility_id=ticket_facility_id,
+                ticket_id=ticket_id,
+                ticket_name=ticket_name or None,
+                ticket_facility_name=ticket_facility_name or None,
             )
         )
 
@@ -483,6 +547,49 @@ def run_once(
 
     for trip_index, monitor in enumerate(monitors, start=1):
         date_span = format_requested_date_span(monitor.requested_dates)
+        if monitor.monitor_type == "ticket":
+            facility_id = monitor.ticket_facility_id or ""
+            ticket_id = monitor.ticket_id or ""
+            ticket_name = monitor.ticket_name or f"ticket {ticket_id}"
+            facility_name = monitor.ticket_facility_name or f"facility {facility_id}"
+            info(
+                f"Trip {trip_index} ({date_span}) - querying ticket '{ticket_name}' "
+                f"({ticket_id}) at {facility_name} ({facility_id})"
+            )
+            ticket_matches = []
+            for day in sorted(monitor.requested_dates):
+                payload = client.fetch_ticket_day(facility_id, day)
+                ticket_matches.extend(find_available_ticket_slots(payload, ticket_id, day))
+                if request_delay_seconds > 0:
+                    time.sleep(request_delay_seconds)
+            if ticket_matches:
+                found_any = True
+                info(
+                    f"Found {len(ticket_matches)} available ticket slot(s) for {ticket_name}. "
+                    f"Trip {trip_index} ({date_span}). Sending Discord alert..."
+                )
+                try:
+                    notifier.notify_ticket(
+                        facility_id=facility_id,
+                        facility_name=facility_name,
+                        ticket_id=ticket_id,
+                        ticket_name=ticket_name,
+                        matches=ticket_matches,
+                        mention=monitor.discord_tag,
+                        log_message=discord_log,
+                    )
+                except RuntimeError as exc:
+                    message = (
+                        f"Discord webhook error for {ticket_name}: "
+                        f"{explain_webhook_error(str(exc))}"
+                    )
+                    error(message)
+                    if issue_log is not None:
+                        issue_log(message)
+            else:
+                info(f"No availability found for {ticket_name}. Trip {trip_index} ({date_span}).")
+            continue
+
         trip_campground_names = [
             campground_names.get(campground_id, f"campground {campground_id}")
             for campground_id in monitor.campground_ids
@@ -564,6 +671,7 @@ def main() -> int:
         try:
             monitors = [
                 MonitorRequest(
+                    monitor_type="campground",
                     campground_ids=parse_campground_ids(args.campground_ids),
                     requested_dates=parse_stay_dates(args.check_in, args.check_out),
                 )
@@ -571,10 +679,16 @@ def main() -> int:
         except ValueError as exc:
             parser.error(str(exc))
 
-    try:
-        campground_names = load_campground_catalog(args.campgrounds_file)
-    except ValueError as exc:
-        parser.error(str(exc))
+    requires_campground_catalog = any(
+        monitor.monitor_type == "campground" for monitor in monitors
+    )
+    if requires_campground_catalog:
+        try:
+            campground_names = load_campground_catalog(args.campgrounds_file)
+        except ValueError as exc:
+            parser.error(str(exc))
+    else:
+        campground_names = {}
 
     webhook_url = args.discord_webhook_url or config_webhook
     if not webhook_url:

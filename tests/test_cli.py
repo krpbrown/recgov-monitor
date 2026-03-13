@@ -75,10 +75,12 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
     assert monitors[0].discord_tag == "@user1"
     assert monitors[0].full_matches_only is True
+    assert monitors[0].monitor_type == "campground"
     assert monitors[1].campground_ids == ["251869", "232492"]
     assert monitors[1].requested_dates == {date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)}
     assert monitors[1].discord_tag is None
     assert monitors[1].full_matches_only is False
+    assert monitors[1].monitor_type == "campground"
 
 
 def test_is_rate_limited_error_detects_429() -> None:
@@ -242,6 +244,7 @@ def test_has_full_site_match_rejects_partial_only() -> None:
 def test_build_trip_summary_includes_dates_and_names() -> None:
     monitors = [
         MonitorRequest(
+            monitor_type="campground",
             campground_ids=["256892", "232492"],
             requested_dates={date(2026, 7, 2), date(2026, 7, 3)},
             full_matches_only=True,
@@ -253,3 +256,37 @@ def test_build_trip_summary_includes_dates_and_names() -> None:
         "Trip 1 (2026-07-02 to 2026-07-04): "
         "Simpson Springs Campground, Apgar Campground [full-only]"
     ]
+
+
+def test_load_monitor_requests_supports_ticket_monitors(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "monitors": [
+                    {
+                        "type": "ticket",
+                        "ticket_facility_id": 251853,
+                        "ticket_id": 10086943,
+                        "ticket_name": "Lehman Caves Tour",
+                        "ticket_facility_name": "Great Basin National Park",
+                        "check_in": "2026-06-10",
+                        "check_out": "2026-06-12",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    webhook, poll_seconds, monitors = load_monitor_requests(str(config_path))
+    assert webhook is None
+    assert poll_seconds is None
+    assert len(monitors) == 1
+    monitor = monitors[0]
+    assert monitor.monitor_type == "ticket"
+    assert monitor.ticket_facility_id == "251853"
+    assert monitor.ticket_id == "10086943"
+    assert monitor.ticket_name == "Lehman Caves Tour"
+    assert monitor.ticket_facility_name == "Great Basin National Park"
+    assert monitor.campground_ids == []

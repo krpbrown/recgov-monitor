@@ -10,3 +10,13 @@ class AvailabilityMatch:
     campsite_name: str
     date: date
     status: str
+
+
+@dataclass(frozen=True)
+class TicketAvailabilityMatch:
+    """An available ticket slot for a specific date."""
+
+    slot_id: str
+    slot_label: str
+    date: date
+    remaining: int | None

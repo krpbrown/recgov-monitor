@@ -21,7 +21,8 @@
           <label>Monitor path <input id="monitorPath" value="monitor.json" /></label>
           <label>Campgrounds path <input id="campgroundsPath" value="campgrounds.json" /></label>
         </div>
-        <div class="grid">
+        <div class="grid two">
+          <label>Tickets path <input id="ticketsPath" value="tickets.json" /></label>
           <label>Users path <input id="usersPath" value="users.json" /></label>
         </div>
         <div class="tokenRow">
@@ -49,7 +50,7 @@
         </div>
       </section>
 
-      <section class="card">
+      <section id="campgroundsSection" class="card">
         <h2>Campgrounds</h2>
         <label>Search <input id="search" placeholder="name, id, park, state" /></label>
         <div class="lists">
@@ -72,8 +73,24 @@
       <section class="card">
         <h2>Trip group</h2>
         <div class="grid two">
+          <label>Trip type
+            <select id="tripType">
+              <option value="campground">Campground</option>
+              <option value="ticket">Ticketed tour/event</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid two">
           <label>Check-in <input id="checkIn" type="date" /></label>
           <label>Check-out <input id="checkOut" type="date" /></label>
+        </div>
+        <div id="ticketControls" class="grid">
+          <label>Search tickets <input id="ticketSearch" placeholder="ticket, park, id" /></label>
+          <label>Ticket for this trip
+            <select id="ticketSelect">
+              <option value="">(select a ticket)</option>
+            </select>
+          </label>
         </div>
         <div class="grid">
           <label>Saved user
@@ -117,6 +134,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=15"></script>
+    <script src="../app.js?v=16"></script>
   </body>
 </html>
