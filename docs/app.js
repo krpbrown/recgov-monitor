@@ -8,6 +8,7 @@ const state = {
   activeTripIndex: null,
   monitorSha: null,
   usersSha: null,
+  ticketsSha: null,
   monitorPollSeconds: 60,
   previewImageCache: {},
   previewRequestId: 0,
@@ -351,6 +352,28 @@ function refreshTripModeUi() {
   }
 }
 
+function addDaysToIsoDate(isoDate, days) {
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function syncCheckoutConstraints() {
+  const checkInNode = el("checkIn");
+  const checkOutNode = el("checkOut");
+  if (!checkInNode || !checkOutNode) return;
+  const checkIn = checkInNode.value;
+  if (!checkIn) {
+    checkOutNode.min = "";
+    return;
+  }
+  checkOutNode.min = checkIn;
+  if (!checkOutNode.value || checkOutNode.value <= checkIn) {
+    checkOutNode.value = addDaysToIsoDate(checkIn, 1);
+  }
+}
+
 function refreshTripGroupsList() {
   const list = el("tripGroupsList");
   list.innerHTML = "";
@@ -600,6 +623,45 @@ async function onSaveUsersRepo() {
   }
 }
 
+async function saveTicketsToRepo() {
+  const ticketsPath = el("ticketsPath").value.trim();
+  if (!ticketsPath) throw new Error("Tickets path is required.");
+  const branch = el("branch").value.trim();
+  const message = `Update tickets file (${state.tickets.length})`;
+  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(state.tickets, null, 2)}\n`)));
+  const url = `${githubApiBase()}/${encodeURIComponent(ticketsPath)}`;
+  const payload = {
+    message,
+    content,
+    branch,
+  };
+  if (state.ticketsSha) payload.sha = state.ticketsSha;
+  const resp = await fetch(url, {
+    method: "PUT",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+      Accept: "application/vnd.github+json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Save tickets failed (${resp.status}): ${body}`);
+  }
+  const saved = await resp.json();
+  state.ticketsSha = saved.content?.sha || state.ticketsSha;
+}
+
+async function onSaveTicketsRepo() {
+  try {
+    await saveTicketsToRepo();
+    status("Saved tickets file to GitHub.");
+  } catch (err) {
+    status(String(err.message || err));
+  }
+}
+
 function loadSavedSecrets() {
   let autoLoadEligible = false;
   try {
@@ -782,9 +844,14 @@ async function onLoad() {
               .filter((t) => t.ticket_facility_id && t.ticket_id && t.ticket_name && t.ticket_facility_name)
               .sort((a, b) => a.ticket_name.localeCompare(b.ticket_name))
           : [];
+        state.ticketsSha = ticketsResult.sha;
       } catch (_err) {
         state.tickets = [];
+        state.ticketsSha = null;
       }
+    } else {
+      state.tickets = [];
+      state.ticketsSha = null;
     }
     state.tickets.forEach((t) => { ticketsByKey[ticketKey(t)] = t; });
     refreshTicketSelect();
@@ -846,6 +913,7 @@ async function onLoad() {
       el("ticketSelect").value = "";
       syncTripUserSelectFromDiscordTag("");
     }
+    syncCheckoutConstraints();
     refreshTripModeUi();
 
     refreshSelectedList();
@@ -971,6 +1039,7 @@ function newTripGroup() {
   el("discordTag").value = "";
   el("fullMatchesOnly").checked = false;
   syncTripUserSelectFromDiscordTag("");
+  syncCheckoutConstraints();
   refreshTripModeUi();
   refreshTicketSelect();
   refreshSelectedList();
@@ -992,6 +1061,7 @@ function loadTripGroup() {
   el("ticketSelect").value = ticketsByKey[tKey] ? tKey : "";
   el("discordTag").value = group.discord_tag || "";
   el("fullMatchesOnly").checked = !!group.full_matches_only;
+  syncCheckoutConstraints();
   syncTripUserSelectFromDiscordTag(group.discord_tag || "");
   refreshTripModeUi();
   refreshSelectedList();
@@ -1035,6 +1105,7 @@ function bindEvents() {
   bindIfPresent("saveUserBtn", "click", saveOrUpdateUser);
   bindIfPresent("deleteUserBtn", "click", removeSelectedUser);
   bindIfPresent("saveUsersRepoBtn", "click", onSaveUsersRepo);
+  bindIfPresent("saveTicketsRepoBtn", "click", onSaveTicketsRepo);
   bindIfPresent("savedUsersList", "change", () => {
     const list = el("savedUsersList");
     const idx = Number(list ? list.value : "");
@@ -1054,7 +1125,10 @@ function bindEvents() {
   });
   bindIfPresent("ticketSearch", "input", refreshTicketSelect);
   bindIfPresent("ticketSelect", "change", autoUpdateActiveTripGroup);
-  bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
+  bindIfPresent("checkIn", "change", () => {
+    syncCheckoutConstraints();
+    autoUpdateActiveTripGroup();
+  });
   bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
   bindIfPresent("discordTag", "input", () => {
     syncTripUserSelectFromDiscordTag(el("discordTag").value.trim());
