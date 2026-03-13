@@ -109,7 +109,7 @@ This repo includes a static web editor in `docs/` for editing `monitor.json` in 
 3. Select branch `main` and folder `/docs`
 4. Open the Pages editor URL (for example `https://<owner>.github.io/<repo>/editor/`)
 5. Enter repo/branch/path values and a fine-grained GitHub token
-6. Click **Load from GitHub**, edit trips, then **Save monitor.json to GitHub**
+6. Click **Load from GitHub**, edit trips, then click **Save to GitHub** (saves `monitor.json` and, when configured, `tickets.json` and `users.json`).
 7. Optional: provide `tickets.json` path to manage ticketed tour/event trips in the same editor.
 8. For campground preview images in the editor, provide a RIDB API key in the page field.
 
@@ -200,6 +200,20 @@ Fast test run example (20 records, force include campground `232492`):
 ```bash
 export RIDB_API_KEY=your_key_here
 python scripts/export_campgrounds.py -S --test-limit 20 --test-include-id 232492 --output campgrounds.json
+```
+
+Export ticketed tours/events (optional, for ticket monitors):
+
+```bash
+python scripts/export_tickets.py --output tickets.json
+```
+
+The exporter includes `park_name` when Recreation.gov provides a parent park/rec-area for the ticket facility.
+
+Filter tickets to a park/query (examples: `Great Basin`, `Arches`, `10088514`):
+
+```bash
+python scripts/export_tickets.py --query "Great Basin" --output tickets.json
 ```
 
 To create or update `monitor.json` with a desktop UI:

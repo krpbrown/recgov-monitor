@@ -345,6 +345,13 @@ function refreshTicketSelect() {
   select.value = ticketsByKey[current] ? current : "";
 }
 
+function rebuildTicketIndex() {
+  Object.keys(ticketsByKey).forEach((k) => delete ticketsByKey[k]);
+  state.tickets.forEach((t) => {
+    ticketsByKey[ticketKey(t)] = t;
+  });
+}
+
 function refreshTripModeUi() {
   const type = el("tripType")?.value || "campground";
   const campSection = el("campgroundsSection");
@@ -894,7 +901,7 @@ async function onLoad() {
       state.loadedTickets = [];
       state.ticketsSha = null;
     }
-    state.tickets.forEach((t) => { ticketsByKey[ticketKey(t)] = t; });
+    rebuildTicketIndex();
     refreshTicketSelect();
 
     if (!monitorResult.json || typeof monitorResult.json !== "object") throw new Error("monitor.json must be an object.");
