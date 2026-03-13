@@ -25,9 +25,6 @@
           <label>Tickets path <input id="ticketsPath" value="tickets.json" /></label>
           <label>Users path <input id="usersPath" value="users.json" /></label>
         </div>
-        <div class="row">
-          <button id="saveTicketsRepoBtn" type="button">Save tickets file to GitHub</button>
-        </div>
         <div class="tokenRow">
           <label class="tokenLabel" for="token">GitHub token</label>
           <input
@@ -125,7 +122,6 @@
         <div class="row">
           <button id="saveUserBtn" type="button">Add or update user</button>
           <button id="deleteUserBtn" type="button">Remove selected user</button>
-          <button id="saveUsersRepoBtn" type="button">Save users file to GitHub</button>
         </div>
         <select id="savedUsersList" size="4"></select>
       </section>
@@ -133,10 +129,10 @@
       <section class="card actionCard">
         <p id="status">Ready.</p>
         <div class="submitRow">
-          <button id="saveBtn">Save monitor.json to GitHub</button>
+          <button id="saveBtn">Save to GitHub</button>
         </div>
       </section>
     </main>
-    <script src="../app.js?v=18"></script>
+    <script src="../app.js?v=19"></script>
   </body>
 </html>

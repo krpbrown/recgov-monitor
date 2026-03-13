@@ -1,10 +1,13 @@
 const state = {
   campgrounds: [],
   tickets: [],
+  loadedTickets: [],
   selectedIds: [],
   tripGroups: [],
   loadedTripGroups: [],
+  loadedMonitorPayload: "",
   savedUsers: [],
+  loadedUsers: [],
   activeTripIndex: null,
   monitorSha: null,
   usersSha: null,
@@ -126,6 +129,23 @@ function normalizeSavedUsers(raw) {
     }))
     .filter((u) => u.name && u.id)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function normalizeTicketsForSave(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((t) => ({
+      ticket_facility_id: String((t && t.ticket_facility_id) || "").trim(),
+      ticket_id: String((t && t.ticket_id) || "").trim(),
+      ticket_name: String((t && t.ticket_name) || "").trim(),
+      ticket_facility_name: String((t && t.ticket_facility_name) || "").trim(),
+    }))
+    .filter((t) => t.ticket_facility_id && t.ticket_id && t.ticket_name && t.ticket_facility_name)
+    .sort((a, b) => {
+      const aKey = `${a.ticket_facility_id}:${a.ticket_id}:${a.ticket_name}`;
+      const bKey = `${b.ticket_facility_id}:${b.ticket_id}:${b.ticket_name}`;
+      return aKey.localeCompare(bKey);
+    });
 }
 
 function normalizeGroup(group) {
@@ -439,6 +459,42 @@ function currentGroupFromInputs() {
   };
 }
 
+function buildMonitorPayloadFromTripGroups(groups, pollSeconds) {
+  const monitors = groups
+    .map((g) => {
+      const type = String(g.type || "campground").toLowerCase() === "ticket" ? "ticket" : "campground";
+      const checkIn = toStorageDateSafe(g.check_in);
+      const checkOut = toStorageDateSafe(g.check_out);
+      if (!checkIn || !checkOut || checkOut <= checkIn) return null;
+      if (type === "ticket") {
+        const facilityId = String(g.ticket_facility_id || "").trim();
+        const ticketId = String(g.ticket_id || "").trim();
+        if (!facilityId || !ticketId) return null;
+        return {
+          type: "ticket",
+          ticket_facility_id: facilityId,
+          ticket_id: ticketId,
+          ...(g.ticket_name ? { ticket_name: g.ticket_name } : {}),
+          ...(g.ticket_facility_name ? { ticket_facility_name: g.ticket_facility_name } : {}),
+          check_in: checkIn,
+          check_out: checkOut,
+          ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
+        };
+      }
+      if (!Array.isArray(g.campground_ids) || g.campground_ids.length === 0) return null;
+      return {
+        type: "campground",
+        campground_ids: g.campground_ids,
+        check_in: checkIn,
+        check_out: checkOut,
+        ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
+        ...(g.full_matches_only ? { full_matches_only: true } : {}),
+      };
+    })
+    .filter((m) => m !== null);
+  return { monitors, poll_seconds: pollSeconds };
+}
+
 function autoUpdateActiveTripGroup() {
   if (state.activeTripIndex === null) return;
   if (state.activeTripIndex < 0 || state.activeTripIndex >= state.tripGroups.length) return;
@@ -586,10 +642,13 @@ function removeSelectedUser() {
 
 async function saveUsersToRepo() {
   const usersPath = el("usersPath").value.trim();
-  if (!usersPath) throw new Error("Users path is required.");
+  if (!usersPath) return false;
+  const normalizedUsers = normalizeSavedUsers(state.savedUsers);
+  const hasChanges = JSON.stringify(normalizedUsers) !== JSON.stringify(state.loadedUsers);
+  if (!hasChanges) return false;
   const branch = el("branch").value.trim();
-  const message = `Update saved users (${state.savedUsers.length})`;
-  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(state.savedUsers, null, 2)}\n`)));
+  const message = `Update saved users (${normalizedUsers.length})`;
+  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(normalizedUsers, null, 2)}\n`)));
   const url = `${githubApiBase()}/${encodeURIComponent(usersPath)}`;
   const payload = {
     message,
@@ -612,23 +671,19 @@ async function saveUsersToRepo() {
   }
   const saved = await resp.json();
   state.usersSha = saved.content?.sha || state.usersSha;
-}
-
-async function onSaveUsersRepo() {
-  try {
-    await saveUsersToRepo();
-    status("Saved users file to GitHub.");
-  } catch (err) {
-    status(String(err.message || err));
-  }
+  state.loadedUsers = normalizedUsers;
+  return true;
 }
 
 async function saveTicketsToRepo() {
   const ticketsPath = el("ticketsPath").value.trim();
-  if (!ticketsPath) throw new Error("Tickets path is required.");
+  if (!ticketsPath) return false;
+  const normalizedTickets = normalizeTicketsForSave(state.tickets);
+  const hasChanges = JSON.stringify(normalizedTickets) !== JSON.stringify(state.loadedTickets);
+  if (!hasChanges) return false;
   const branch = el("branch").value.trim();
-  const message = `Update tickets file (${state.tickets.length})`;
-  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(state.tickets, null, 2)}\n`)));
+  const message = `Update tickets file (${normalizedTickets.length})`;
+  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(normalizedTickets, null, 2)}\n`)));
   const url = `${githubApiBase()}/${encodeURIComponent(ticketsPath)}`;
   const payload = {
     message,
@@ -651,15 +706,8 @@ async function saveTicketsToRepo() {
   }
   const saved = await resp.json();
   state.ticketsSha = saved.content?.sha || state.ticketsSha;
-}
-
-async function onSaveTicketsRepo() {
-  try {
-    await saveTicketsToRepo();
-    status("Saved tickets file to GitHub.");
-  } catch (err) {
-    status(String(err.message || err));
-  }
+  state.loadedTickets = normalizedTickets;
+  return true;
 }
 
 function loadSavedSecrets() {
@@ -833,24 +881,17 @@ async function onLoad() {
     if (ticketsPath) {
       try {
         const ticketsResult = await loadJsonFromRepo(ticketsPath);
-        state.tickets = Array.isArray(ticketsResult.json)
-          ? ticketsResult.json
-              .map((t) => ({
-                ticket_facility_id: String((t && t.ticket_facility_id) || "").trim(),
-                ticket_id: String((t && t.ticket_id) || "").trim(),
-                ticket_name: String((t && t.ticket_name) || "").trim(),
-                ticket_facility_name: String((t && t.ticket_facility_name) || "").trim(),
-              }))
-              .filter((t) => t.ticket_facility_id && t.ticket_id && t.ticket_name && t.ticket_facility_name)
-              .sort((a, b) => a.ticket_name.localeCompare(b.ticket_name))
-          : [];
+        state.tickets = normalizeTicketsForSave(ticketsResult.json);
+        state.loadedTickets = normalizeTicketsForSave(ticketsResult.json);
         state.ticketsSha = ticketsResult.sha;
       } catch (_err) {
         state.tickets = [];
+        state.loadedTickets = [];
         state.ticketsSha = null;
       }
     } else {
       state.tickets = [];
+      state.loadedTickets = [];
       state.ticketsSha = null;
     }
     state.tickets.forEach((t) => { ticketsByKey[ticketKey(t)] = t; });
@@ -880,15 +921,20 @@ async function onLoad() {
           .filter((m) => (m.type === "ticket" ? (m.ticket_facility_id && m.ticket_id) : m.campground_ids.length > 0))
       : [];
     state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
+    state.loadedMonitorPayload = JSON.stringify(buildMonitorPayloadFromTripGroups(state.tripGroups, state.monitorPollSeconds));
 
     if (usersPath) {
       try {
         const usersResult = await loadJsonFromRepo(usersPath);
         state.savedUsers = normalizeSavedUsers(usersResult.json);
+        state.loadedUsers = normalizeSavedUsers(usersResult.json);
         state.usersSha = usersResult.sha;
         saveUsersToStorage();
       } catch (_err) {
+        state.loadedUsers = normalizeSavedUsers(state.savedUsers);
       }
+    } else {
+      state.loadedUsers = normalizeSavedUsers(state.savedUsers);
     }
     refreshSavedUsersUi();
 
@@ -931,70 +977,67 @@ async function onSave() {
     const poll = Number(state.monitorPollSeconds);
     if (!Number.isInteger(poll) || poll < 0) throw new Error("poll_seconds must be a non-negative integer.");
 
-    const monitors = state.tripGroups
-      .map((g) => {
-        const type = String(g.type || "campground").toLowerCase() === "ticket" ? "ticket" : "campground";
-        const checkIn = toStorageDateSafe(g.check_in);
-        const checkOut = toStorageDateSafe(g.check_out);
-        if (!checkIn || !checkOut || checkOut <= checkIn) return null;
-        if (type === "ticket") {
-          const facilityId = String(g.ticket_facility_id || "").trim();
-          const ticketId = String(g.ticket_id || "").trim();
-          if (!facilityId || !ticketId) return null;
-          return {
-            type: "ticket",
-            ticket_facility_id: facilityId,
-            ticket_id: ticketId,
-            ...(g.ticket_name ? { ticket_name: g.ticket_name } : {}),
-            ...(g.ticket_facility_name ? { ticket_facility_name: g.ticket_facility_name } : {}),
-            check_in: checkIn,
-            check_out: checkOut,
-            ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
-          };
-        }
-        if (!Array.isArray(g.campground_ids) || g.campground_ids.length === 0) return null;
-        return {
-          type: "campground",
-          campground_ids: g.campground_ids,
-          check_in: checkIn,
-          check_out: checkOut,
-          ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
-          ...(g.full_matches_only ? { full_matches_only: true } : {}),
-        };
-      })
-      .filter((m) => m !== null);
+    const payload = buildMonitorPayloadFromTripGroups(state.tripGroups, poll);
+    const monitors = payload.monitors;
     if (monitors.length === 0) {
       throw new Error("Add at least one complete trip group (dates + campground) before saving.");
     }
-    const payload = { monitors, poll_seconds: poll };
+    const monitorChanged = JSON.stringify(payload) !== state.loadedMonitorPayload;
 
-    const monitorPath = el("monitorPath").value.trim();
-    const branch = el("branch").value.trim();
-    const message = buildAutoCommitMessage();
-    const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(payload, null, 2)}\n`)));
-    const url = `${githubApiBase()}/${encodeURIComponent(monitorPath)}`;
-    const resp = await fetch(url, {
-      method: "PUT",
-      headers: {
-        ...authHeaders(),
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github+json",
-      },
-      body: JSON.stringify({
-        message,
-        content,
-        sha: state.monitorSha,
-        branch,
-      }),
-    });
-    if (!resp.ok) {
-      const body = await resp.text();
-      throw new Error(`Save failed (${resp.status}): ${body}`);
+    const savedParts = [];
+    const unchangedParts = [];
+    if (monitorChanged) {
+      const monitorPath = el("monitorPath").value.trim();
+      const branch = el("branch").value.trim();
+      const message = buildAutoCommitMessage();
+      const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(payload, null, 2)}\n`)));
+      const url = `${githubApiBase()}/${encodeURIComponent(monitorPath)}`;
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: {
+          ...authHeaders(),
+          "Content-Type": "application/json",
+          Accept: "application/vnd.github+json",
+        },
+        body: JSON.stringify({
+          message,
+          content,
+          sha: state.monitorSha,
+          branch,
+        }),
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`Save monitor failed (${resp.status}): ${body}`);
+      }
+      const saved = await resp.json();
+      state.monitorSha = saved.content?.sha || state.monitorSha;
+      state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
+      state.loadedMonitorPayload = JSON.stringify(payload);
+      savedParts.push("monitor.json");
+    } else {
+      unchangedParts.push("monitor.json");
     }
-    const saved = await resp.json();
-    state.monitorSha = saved.content?.sha || state.monitorSha;
-    state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
-    status("Saved monitor.json to GitHub.");
+
+    const usersPath = el("usersPath").value.trim();
+    if (usersPath) {
+      const usersSaved = await saveUsersToRepo();
+      if (usersSaved) savedParts.push(usersPath);
+      else unchangedParts.push(usersPath);
+    }
+
+    const ticketsPath = el("ticketsPath").value.trim();
+    if (ticketsPath) {
+      const ticketsSaved = await saveTicketsToRepo();
+      if (ticketsSaved) savedParts.push(ticketsPath);
+      else unchangedParts.push(ticketsPath);
+    }
+
+    if (savedParts.length === 0) {
+      status("No changes to save.");
+      return;
+    }
+    status(`Saved to GitHub: ${savedParts.join(", ")}.${unchangedParts.length ? ` Unchanged: ${unchangedParts.join(", ")}.` : ""}`);
   } catch (err) {
     status(String(err.message || err));
   }
@@ -1104,8 +1147,6 @@ function bindEvents() {
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
   bindIfPresent("saveUserBtn", "click", saveOrUpdateUser);
   bindIfPresent("deleteUserBtn", "click", removeSelectedUser);
-  bindIfPresent("saveUsersRepoBtn", "click", onSaveUsersRepo);
-  bindIfPresent("saveTicketsRepoBtn", "click", onSaveTicketsRepo);
   bindIfPresent("savedUsersList", "change", () => {
     const list = el("savedUsersList");
     const idx = Number(list ? list.value : "");
