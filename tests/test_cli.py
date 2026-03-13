@@ -4,7 +4,9 @@ from datetime import date, datetime
 import pytest
 
 from recgov_monitor.cli import (
+    MonitorRequest,
     build_parser,
+    build_trip_summary,
     compute_sleep_seconds,
     format_poll_timestamp,
     has_full_site_match,
@@ -235,3 +237,19 @@ def test_has_full_site_match_rejects_partial_only() -> None:
         ),
     ]
     assert not has_full_site_match(matches, requested)
+
+
+def test_build_trip_summary_includes_dates_and_names() -> None:
+    monitors = [
+        MonitorRequest(
+            campground_ids=["256892", "232492"],
+            requested_dates={date(2026, 7, 2), date(2026, 7, 3)},
+            full_matches_only=True,
+        )
+    ]
+    names = {"256892": "Simpson Springs Campground", "232492": "Apgar Campground"}
+    summary = build_trip_summary(monitors, names, max_campgrounds=6)
+    assert summary == [
+        "Trip 1 (2026-07-02 to 2026-07-04): "
+        "Simpson Springs Campground, Apgar Campground [full-only]"
+    ]

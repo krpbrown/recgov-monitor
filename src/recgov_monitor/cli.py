@@ -117,6 +117,28 @@ def has_full_site_match(matches: list[Any], requested_dates: set[date]) -> bool:
     return any(requested_dates.issubset(days) for days in by_site.values())
 
 
+def build_trip_summary(
+    monitors: list[MonitorRequest],
+    campground_names: dict[str, str],
+    max_campgrounds: int = 6,
+) -> list[str]:
+    summary_lines: list[str] = []
+    for trip_index, monitor in enumerate(monitors, start=1):
+        date_span = format_requested_date_span(monitor.requested_dates)
+        names = [
+            campground_names.get(campground_id, f"campground {campground_id}")
+            for campground_id in monitor.campground_ids
+        ]
+        if len(names) > max_campgrounds:
+            names_part = ", ".join(names[:max_campgrounds])
+            names_part = f"{names_part}, +{len(names) - max_campgrounds} more"
+        else:
+            names_part = ", ".join(names) if names else "(no campgrounds)"
+        mode_part = " [full-only]" if monitor.full_matches_only else ""
+        summary_lines.append(f"Trip {trip_index} ({date_span}): {names_part}{mode_part}")
+    return summary_lines
+
+
 class _RunLogger:
     def __init__(self, path: Path) -> None:
         self._file = path.open("a", encoding="utf-8")
@@ -148,12 +170,14 @@ class _StatusReporter:
         started_at: datetime,
         *,
         logger: _RunLogger,
+        trip_summary: list[str] | None = None,
     ) -> None:
         self.webhook_url = webhook_url.strip() if webhook_url else ""
         self.mention = mention.strip() if mention else ""
         self.started_at = started_at
         self.logger = logger
         self.client = HttpClient(timeout_seconds=10)
+        self.trip_summary = trip_summary or []
         self.interval_total_issues = 0
         self.interval_rate_limit_issues = 0
         self.interval_last_issue_message = ""
@@ -259,6 +283,9 @@ class _StatusReporter:
             f"Failed queries this interval: {self.interval_failed_queries}\n"
             f"{issue_line}"
         )
+        if self.trip_summary:
+            summary_block = "\n".join(self.trip_summary)
+            content = f"{content}\nTrips:\n{summary_block}"
         if self.mention and self.interval_total_queries > 0:
             failure_ratio = self.interval_failed_queries / self.interval_total_queries
             if failure_ratio > 0.5:
@@ -580,11 +607,13 @@ def main() -> int:
                 f"trip {trip_index} uses discord_tag '{monitor.discord_tag}', which may not ping via webhook. "
                 "Use a user mention like <@123456789012345678> (or a numeric user ID)."
             )
+    trip_summary = build_trip_summary(monitors, campground_names)
     status_reporter = _StatusReporter(
         webhook_url=logger_webhook_url,
         mention=logger_mention,
         started_at=datetime.now(),
         logger=logger,
+        trip_summary=trip_summary,
     )
     logger.info(f"{format_poll_timestamp()} - Recgov Monitor is now polling")
     status_reporter.emit_startup()
