@@ -21,6 +21,9 @@
           <label>Monitor path <input id="monitorPath" value="monitor.json" /></label>
           <label>Campgrounds path <input id="campgroundsPath" value="campgrounds.json" /></label>
         </div>
+        <div class="grid">
+          <label>Users path <input id="usersPath" value="users.json" /></label>
+        </div>
         <div class="tokenRow">
           <label class="tokenLabel" for="token">GitHub token</label>
           <input
@@ -73,6 +76,13 @@
           <label>Check-out <input id="checkOut" type="date" /></label>
         </div>
         <div class="grid">
+          <label>Saved user
+            <select id="tripUserSelect">
+              <option value="">(custom / none)</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid">
           <label>Discord tag for this trip (optional) <input id="discordTag" placeholder="&lt;@123456789012345678&gt; or numeric user ID" /></label>
         </div>
         <div class="row">
@@ -86,6 +96,20 @@
         <select id="tripGroupsList" size="2"></select>
       </section>
 
+      <section class="card">
+        <h2>Saved Discord users</h2>
+        <div class="grid two">
+          <label>Name <input id="userNameInput" placeholder="Kris" /></label>
+          <label>Discord ID <input id="userIdInput" placeholder="312027909042864130" /></label>
+        </div>
+        <div class="row">
+          <button id="saveUserBtn" type="button">Add or update user</button>
+          <button id="deleteUserBtn" type="button">Remove selected user</button>
+          <button id="saveUsersRepoBtn" type="button">Save users file to GitHub</button>
+        </div>
+        <select id="savedUsersList" size="4"></select>
+      </section>
+
       <section class="card actionCard">
         <p id="status">Ready.</p>
         <div class="submitRow">
@@ -93,6 +117,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=12"></script>
+    <script src="../app.js?v=14"></script>
   </body>
 </html>

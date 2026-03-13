@@ -3,8 +3,10 @@ const state = {
   selectedIds: [],
   tripGroups: [],
   loadedTripGroups: [],
+  savedUsers: [],
   activeTripIndex: null,
   monitorSha: null,
+  usersSha: null,
   monitorPollSeconds: 60,
   previewImageCache: {},
   previewRequestId: 0,
@@ -16,6 +18,7 @@ const STORAGE_KEYS = {
   ridbKey: "recgovMonitorRidbKey",
   rememberGithubToken: "recgovMonitorRememberGithubToken",
   rememberRidbKey: "recgovMonitorRememberRidbKey",
+  savedUsers: "recgovMonitorSavedUsers",
 };
 
 const el = (id) => document.getElementById(id);
@@ -87,6 +90,32 @@ function isoDateFromDisplay(displayDate) {
   if (!displayDate) return "";
   const [m, d, y] = displayDate.split("-");
   return `${y}-${m}-${d}`;
+}
+
+function normalizeDiscordUserId(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return "";
+  const mentionMatch = value.match(/^<@!?(\d{17,20})>$/);
+  if (mentionMatch) return mentionMatch[1];
+  const digitsMatch = value.match(/^@?(\d{17,20})$/);
+  if (digitsMatch) return digitsMatch[1];
+  return "";
+}
+
+function asDiscordMention(userId) {
+  const id = normalizeDiscordUserId(userId);
+  return id ? `<@${id}>` : "";
+}
+
+function normalizeSavedUsers(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((u) => ({
+      name: String((u && u.name) || "").trim(),
+      id: normalizeDiscordUserId((u && u.id) || ""),
+    }))
+    .filter((u) => u.name && u.id)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function normalizeGroup(group) {
@@ -337,6 +366,133 @@ function updatePreview(id) {
     });
 }
 
+function saveUsersToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.savedUsers, JSON.stringify(state.savedUsers));
+  } catch (_) {
+  }
+}
+
+function loadSavedUsersFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.savedUsers);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    state.savedUsers = normalizeSavedUsers(parsed);
+  } catch (_) {
+  }
+}
+
+function refreshSavedUsersUi() {
+  const list = el("savedUsersList");
+  const tripUserSelect = el("tripUserSelect");
+  if (list) {
+    list.innerHTML = "";
+    state.savedUsers.forEach((u, idx) => {
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = `${u.name} (${u.id})`;
+      list.appendChild(opt);
+    });
+  }
+  if (tripUserSelect) {
+    const current = tripUserSelect.value;
+    tripUserSelect.innerHTML = "";
+    const custom = document.createElement("option");
+    custom.value = "";
+    custom.textContent = "(custom / none)";
+    tripUserSelect.appendChild(custom);
+    state.savedUsers.forEach((u) => {
+      const opt = document.createElement("option");
+      opt.value = u.id;
+      opt.textContent = `${u.name} (${u.id})`;
+      tripUserSelect.appendChild(opt);
+    });
+    tripUserSelect.value = state.savedUsers.some((u) => u.id === current) ? current : "";
+  }
+}
+
+function syncTripUserSelectFromDiscordTag(tag) {
+  const tripUserSelect = el("tripUserSelect");
+  if (!tripUserSelect) return;
+  const id = normalizeDiscordUserId(tag);
+  if (!id) {
+    tripUserSelect.value = "";
+    return;
+  }
+  tripUserSelect.value = state.savedUsers.some((u) => u.id === id) ? id : "";
+}
+
+function saveOrUpdateUser() {
+  const name = el("userNameInput").value.trim();
+  const id = normalizeDiscordUserId(el("userIdInput").value);
+  if (!name || !id) {
+    status("Enter both user name and a valid Discord numeric ID.");
+    return;
+  }
+  const existingIndex = state.savedUsers.findIndex((u) => u.id === id || u.name.toLowerCase() === name.toLowerCase());
+  if (existingIndex >= 0) {
+    state.savedUsers[existingIndex] = { name, id };
+  } else {
+    state.savedUsers.push({ name, id });
+    state.savedUsers.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  saveUsersToStorage();
+  refreshSavedUsersUi();
+  syncTripUserSelectFromDiscordTag(el("discordTag").value.trim());
+  status(`Saved user ${name}.`);
+}
+
+function removeSelectedUser() {
+  const list = el("savedUsersList");
+  const idx = Number(list ? list.value : "");
+  if (!Number.isInteger(idx) || idx < 0 || idx >= state.savedUsers.length) return;
+  const removed = state.savedUsers.splice(idx, 1)[0];
+  saveUsersToStorage();
+  refreshSavedUsersUi();
+  syncTripUserSelectFromDiscordTag(el("discordTag").value.trim());
+  status(`Removed user ${removed.name}.`);
+}
+
+async function saveUsersToRepo() {
+  const usersPath = el("usersPath").value.trim();
+  if (!usersPath) throw new Error("Users path is required.");
+  const branch = el("branch").value.trim();
+  const message = `Update saved users (${state.savedUsers.length})`;
+  const content = btoa(unescape(encodeURIComponent(`${JSON.stringify(state.savedUsers, null, 2)}\n`)));
+  const url = `${githubApiBase()}/${encodeURIComponent(usersPath)}`;
+  const payload = {
+    message,
+    content,
+    branch,
+  };
+  if (state.usersSha) payload.sha = state.usersSha;
+  const resp = await fetch(url, {
+    method: "PUT",
+    headers: {
+      ...authHeaders(),
+      "Content-Type": "application/json",
+      Accept: "application/vnd.github+json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`Save users failed (${resp.status}): ${body}`);
+  }
+  const saved = await resp.json();
+  state.usersSha = saved.content?.sha || state.usersSha;
+}
+
+async function onSaveUsersRepo() {
+  try {
+    await saveUsersToRepo();
+    status("Saved users file to GitHub.");
+  } catch (err) {
+    status(String(err.message || err));
+  }
+}
+
 function loadSavedSecrets() {
   let autoLoadEligible = false;
   try {
@@ -484,6 +640,7 @@ async function onLoad() {
     status("Loading campgrounds and monitor config...");
     const campgroundsPath = el("campgroundsPath").value.trim();
     const monitorPath = el("monitorPath").value.trim();
+    const usersPath = el("usersPath").value.trim();
     const campResult = await loadJsonFromRepo(campgroundsPath);
     const monitorResult = await loadJsonFromRepo(monitorPath);
 
@@ -505,6 +662,7 @@ async function onLoad() {
     const monitor = monitorResult.json;
     state.monitorPollSeconds = Number.isInteger(monitor.poll_seconds) ? Number(monitor.poll_seconds) : 60;
     state.monitorSha = monitorResult.sha;
+    state.usersSha = null;
 
     state.tripGroups = Array.isArray(monitor.monitors)
       ? monitor.monitors
@@ -520,6 +678,17 @@ async function onLoad() {
       : [];
     state.loadedTripGroups = state.tripGroups.map((g) => normalizeGroup(g));
 
+    if (usersPath) {
+      try {
+        const usersResult = await loadJsonFromRepo(usersPath);
+        state.savedUsers = normalizeSavedUsers(usersResult.json);
+        state.usersSha = usersResult.sha;
+        saveUsersToStorage();
+      } catch (_err) {
+      }
+    }
+    refreshSavedUsersUi();
+
     state.activeTripIndex = null;
     state.selectedIds = state.tripGroups.length ? [...state.tripGroups[0].campground_ids] : [];
     if (state.tripGroups.length) {
@@ -527,11 +696,13 @@ async function onLoad() {
       el("checkOut").value = isoDateFromDisplay(state.tripGroups[0].check_out);
       el("discordTag").value = state.tripGroups[0].discord_tag || "";
       el("fullMatchesOnly").checked = !!state.tripGroups[0].full_matches_only;
+      syncTripUserSelectFromDiscordTag(state.tripGroups[0].discord_tag || "");
     } else {
       el("checkIn").value = "";
       el("checkOut").value = "";
       el("discordTag").value = "";
       el("fullMatchesOnly").checked = false;
+      syncTripUserSelectFromDiscordTag("");
     }
 
     refreshSelectedList();
@@ -632,6 +803,7 @@ function newTripGroup() {
   el("checkOut").value = "";
   el("discordTag").value = "";
   el("fullMatchesOnly").checked = false;
+  syncTripUserSelectFromDiscordTag("");
   refreshSelectedList();
   refreshTripGroupsList();
   el("tripGroupsList").value = String(state.activeTripIndex);
@@ -648,6 +820,7 @@ function loadTripGroup() {
   el("checkOut").value = isoDateFromDisplay(group.check_out);
   el("discordTag").value = group.discord_tag || "";
   el("fullMatchesOnly").checked = !!group.full_matches_only;
+  syncTripUserSelectFromDiscordTag(group.discord_tag || "");
   refreshSelectedList();
   status(`Loaded trip group #${idx + 1}.`);
 }
@@ -662,6 +835,8 @@ function removeTripGroup() {
 }
 
 function bindEvents() {
+  loadSavedUsersFromStorage();
+  refreshSavedUsersUi();
   const shouldAutoLoad = loadSavedSecrets();
   bindIfPresent("loadBtn", "click", onLoad);
   bindIfPresent("saveBtn", "click", onSave);
@@ -683,9 +858,28 @@ function bindEvents() {
   bindIfPresent("newTripBtn", "click", newTripGroup);
   bindIfPresent("loadTripBtn", "click", loadTripGroup);
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
+  bindIfPresent("saveUserBtn", "click", saveOrUpdateUser);
+  bindIfPresent("deleteUserBtn", "click", removeSelectedUser);
+  bindIfPresent("saveUsersRepoBtn", "click", onSaveUsersRepo);
+  bindIfPresent("savedUsersList", "change", () => {
+    const list = el("savedUsersList");
+    const idx = Number(list ? list.value : "");
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.savedUsers.length) return;
+    const selected = state.savedUsers[idx];
+    el("userNameInput").value = selected.name;
+    el("userIdInput").value = selected.id;
+  });
+  bindIfPresent("tripUserSelect", "change", () => {
+    const id = el("tripUserSelect").value;
+    el("discordTag").value = id ? asDiscordMention(id) : "";
+    autoUpdateActiveTripGroup();
+  });
   bindIfPresent("checkIn", "change", autoUpdateActiveTripGroup);
   bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
-  bindIfPresent("discordTag", "input", autoUpdateActiveTripGroup);
+  bindIfPresent("discordTag", "input", () => {
+    syncTripUserSelectFromDiscordTag(el("discordTag").value.trim());
+    autoUpdateActiveTripGroup();
+  });
   bindIfPresent("fullMatchesOnly", "change", autoUpdateActiveTripGroup);
   bindIfPresent("availableList", "change", () => {
     const ids = selectedValues(el("availableList"));
