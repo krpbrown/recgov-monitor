@@ -329,9 +329,26 @@ function refreshTripModeUi() {
   const campSection = el("campgroundsSection");
   const ticketControls = el("ticketControls");
   const fullOnlyWrap = el("fullMatchesOnly")?.closest("div.row");
-  if (campSection) campSection.style.display = type === "campground" ? "" : "none";
-  if (ticketControls) ticketControls.style.display = type === "ticket" ? "" : "none";
-  if (fullOnlyWrap) fullOnlyWrap.style.display = type === "campground" ? "" : "none";
+  const campEnabled = type === "campground";
+  const ticketEnabled = type === "ticket";
+  if (campSection) {
+    campSection.classList.toggle("modeInactive", !campEnabled);
+    campSection.querySelectorAll("input, select, button").forEach((node) => {
+      node.disabled = !campEnabled;
+    });
+  }
+  if (ticketControls) {
+    ticketControls.classList.toggle("modeInactive", !ticketEnabled);
+    ticketControls.querySelectorAll("input, select").forEach((node) => {
+      node.disabled = !ticketEnabled;
+    });
+  }
+  if (fullOnlyWrap) {
+    fullOnlyWrap.classList.toggle("modeInactive", !campEnabled);
+    fullOnlyWrap.querySelectorAll("input").forEach((node) => {
+      node.disabled = !campEnabled;
+    });
+  }
 }
 
 function refreshTripGroupsList() {

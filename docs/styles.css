@@ -195,6 +195,10 @@ button:hover {
   color: #6b7280;
 }
 
+.modeInactive {
+  opacity: 0.55;
+}
+
 #tripGroupsList {
   min-height: 0;
   height: auto;
