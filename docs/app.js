@@ -107,6 +107,13 @@ function asDiscordMention(userId) {
   return id ? `<@${id}>` : "";
 }
 
+function displayUserFromTag(discordTag) {
+  const id = normalizeDiscordUserId(discordTag);
+  if (!id) return String(discordTag || "").trim();
+  const user = state.savedUsers.find((u) => u.id === id);
+  return user ? user.name : String(discordTag || "").trim();
+}
+
 function normalizeSavedUsers(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -284,7 +291,8 @@ function refreshTripGroupsList() {
     const rangeText = g.check_in && g.check_out ? `${g.check_in} to ${g.check_out}` : "dates not set";
     const opt = document.createElement("option");
     opt.value = String(idx);
-    const tagPart = g.discord_tag ? ` | tag: ${g.discord_tag}` : "";
+    const tagLabel = displayUserFromTag(g.discord_tag);
+    const tagPart = tagLabel ? ` | tag: ${tagLabel}` : "";
     const modePart = g.full_matches_only ? " | full-only" : "";
     opt.textContent = `Trip ${idx + 1}: ${rangeText} | ${namesText}${tagPart}${modePart}`;
     list.appendChild(opt);
@@ -410,6 +418,7 @@ function refreshSavedUsersUi() {
     });
     tripUserSelect.value = state.savedUsers.some((u) => u.id === current) ? current : "";
   }
+  refreshTripGroupsList();
 }
 
 function syncTripUserSelectFromDiscordTag(tag) {
