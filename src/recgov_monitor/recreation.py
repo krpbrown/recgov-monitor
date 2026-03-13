@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from recgov_monitor.http import HttpClient
 from recgov_monitor.models import AvailabilityMatch, TicketAvailabilityMatch
@@ -22,7 +23,7 @@ class RecreationGovClient:
         params = {"start_date": f"{month_start.isoformat()}T00:00:00.000Z"}
         return self.client.get_json(url, params=params)
 
-    def fetch_ticket_day(self, facility_id: str, day: date) -> dict:
+    def fetch_ticket_day(self, facility_id: str, day: date) -> Any:
         url = f"https://www.recreation.gov/api/ticket/availability/facility/{facility_id}"
         params = {"date": day.isoformat()}
         return self.client.get_json(url, params=params)
@@ -72,10 +73,12 @@ def find_available_campsites(payload: dict, requested_dates: set[date]) -> list[
 
 
 def find_available_ticket_slots(
-    payload: dict,
+    payload: Any,
     ticket_id: str,
     target_date: date,
 ) -> list[TicketAvailabilityMatch]:
+    if not isinstance(payload, dict):
+        return []
     inventory = payload.get("inventory")
     if not isinstance(inventory, dict):
         return []

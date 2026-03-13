@@ -57,3 +57,8 @@ def test_find_available_ticket_slots_parses_bucket_inventory() -> None:
     assert len(matches) == 2
     labels = {m.slot_label for m in matches}
     assert labels == {"09:00 AM", "01:00 PM"}
+
+
+def test_find_available_ticket_slots_handles_list_payload() -> None:
+    matches = find_available_ticket_slots([], "10086943", date(2026, 6, 10))
+    assert matches == []
