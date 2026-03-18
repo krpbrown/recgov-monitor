@@ -340,6 +340,33 @@ def test_load_monitor_requests_supports_rv_campsite_preference(tmp_path) -> None
     assert monitor.rv_length_ft == 35
 
 
+def test_load_monitor_requests_supports_legacy_site_preference_keys(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-06-18",
+                        "check_out": "2026-06-20",
+                        "site_preference": "rv",
+                        "rv_length": 22,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, _, monitors = load_monitor_requests(str(config_path))
+    assert len(monitors) == 1
+    monitor = monitors[0]
+    assert monitor.campsite_preference == "rv"
+    assert monitor.rv_length_ft == 22
+
+
 def test_load_monitor_requests_supports_trip_title(tmp_path) -> None:
     config_path = tmp_path / "monitor.json"
     config_path.write_text(

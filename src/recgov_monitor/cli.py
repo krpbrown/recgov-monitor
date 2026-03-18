@@ -412,7 +412,11 @@ def load_monitor_requests(
         discord_tag_raw = item.get("discord_tag")
         full_matches_only_raw = item.get("full_matches_only")
         campsite_preference_raw = item.get("campsite_preference")
+        if campsite_preference_raw is None:
+            campsite_preference_raw = item.get("site_preference")
         rv_length_ft_raw = item.get("rv_length_ft")
+        if rv_length_ft_raw is None:
+            rv_length_ft_raw = item.get("rv_length")
         ticket_facility_id_raw = item.get("ticket_facility_id")
         ticket_id_raw = item.get("ticket_id")
         ticket_name_raw = item.get("ticket_name")
@@ -793,6 +797,18 @@ def main() -> int:
     logger = _RunLogger(Path(args.log_file))
     logger.info(f"Logging to {args.log_file}")
     logger.info(f"Loaded {len(monitors)} trip group(s) from config.")
+    for trip_index, monitor in enumerate(monitors, start=1):
+        if monitor.monitor_type != "campground":
+            continue
+        date_span = format_requested_date_span(monitor.requested_dates)
+        if monitor.campsite_preference == "rv":
+            rv_len = monitor.rv_length_ft if monitor.rv_length_ft is not None else "any"
+            pref_text = f"RV (min length {rv_len} ft)"
+        else:
+            pref_text = "Tent"
+        logger.info(
+            f"Trip {trip_index} ({date_span}) loaded site preference: {pref_text}"
+        )
     for trip_index, monitor in enumerate(monitors, start=1):
         if looks_like_plain_username_tag(monitor.discord_tag):
             logger.info(
