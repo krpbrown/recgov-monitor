@@ -78,7 +78,8 @@
       "trip_title": "Grand Canyon",
       "discord_tag": "<@1482867486847139931>",
       "campsite_preference": "rv",
-      "rv_length_ft": 22
+      "rv_length_ft": 22,
+      "full_matches_only": true
     }
   ],
   "poll_seconds": 60
