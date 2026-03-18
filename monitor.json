@@ -51,12 +51,33 @@
     {
       "type": "campground",
       "campground_ids": [
-        234058
+        234058,
+        234079
       ],
       "check_in": "2026-09-15",
       "check_out": "2026-09-19",
       "discord_tag": "<@1482867486847139931>",
       "full_matches_only": true
+    },
+    {
+      "type": "campground",
+      "campground_ids": [
+        272266,
+        232445
+      ],
+      "check_in": "2026-09-18",
+      "check_out": "2026-09-22",
+      "discord_tag": "<@1482867486847139931>",
+      "full_matches_only": true
+    },
+    {
+      "type": "campground",
+      "campground_ids": [
+        232490
+      ],
+      "check_in": "2026-09-22",
+      "check_out": "2026-09-27",
+      "discord_tag": "<@1482867486847139931>"
     }
   ],
   "poll_seconds": 60
