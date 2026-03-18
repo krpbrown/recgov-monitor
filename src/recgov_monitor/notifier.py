@@ -23,6 +23,7 @@ class DiscordNotifier:
         campground_name: str,
         matches: list[AvailabilityMatch],
         requested_dates: set[date] | None = None,
+        trip_title: str | None = None,
         mention: str | None = None,
         log_message: Callable[[str], None] | None = None,
     ) -> None:
@@ -84,6 +85,9 @@ class DiscordNotifier:
             )
 
         mention_prefix = _normalize_discord_mention(mention)
+        title_prefix = _normalize_trip_title(trip_title)
+        if title_prefix:
+            header = f"{title_prefix} {header}"
         if mention_prefix:
             header = f"{mention_prefix} {header}"
 
@@ -101,6 +105,7 @@ class DiscordNotifier:
         ticket_name: str,
         matches: list[TicketAvailabilityMatch],
         *,
+        trip_title: str | None = None,
         mention: str | None = None,
         log_message: Callable[[str], None] | None = None,
     ) -> None:
@@ -111,6 +116,9 @@ class DiscordNotifier:
             f"Ticket availability found for {ticket_name} "
             f"({ticket_id}) at {facility_name} ({facility_id})"
         )
+        title_prefix = _normalize_trip_title(trip_title)
+        if title_prefix:
+            header = f"{title_prefix} {header}"
         mention_prefix = _normalize_discord_mention(mention)
         if mention_prefix:
             header = f"{mention_prefix} {header}"
@@ -199,6 +207,15 @@ def _normalize_discord_mention(raw: str | None) -> str:
         user_id = value[1:] if value.startswith("@") else value
         return f"<@{user_id}>"
     return value
+
+
+def _normalize_trip_title(raw: str | None) -> str:
+    if not raw:
+        return ""
+    value = raw.strip()
+    if not value:
+        return ""
+    return f"[{value}]"
 
 
 def validate_discord_webhook_url(webhook_url: str) -> None:

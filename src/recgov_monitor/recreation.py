@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import re
 from typing import Any
 
 from recgov_monitor.http import HttpClient
@@ -47,11 +48,30 @@ def extract_campground_name(payload: dict, fallback: str) -> str:
     return fallback
 
 
-def find_available_campsites(payload: dict, requested_dates: set[date]) -> list[AvailabilityMatch]:
+def find_available_campsites(
+    payload: dict,
+    requested_dates: set[date],
+    *,
+    campsite_preference: str = "tent",
+    rv_length_ft: int | None = None,
+) -> list[AvailabilityMatch]:
     """Extract all campsites that are available on requested dates."""
+
+    preference = campsite_preference.strip().lower() if isinstance(campsite_preference, str) else "tent"
+    if preference not in {"tent", "rv", "any"}:
+        preference = "tent"
 
     matches: list[AvailabilityMatch] = []
     for campsite_id, campsite_data in payload.get("campsites", {}).items():
+        if not isinstance(campsite_data, dict):
+            continue
+        if preference != "any":
+            if not _campsite_matches_preference(
+                campsite_data,
+                preference=preference,
+                rv_length_ft=rv_length_ft,
+            ):
+                continue
         campsite_name = campsite_data.get("site", campsite_id)
         availabilities = campsite_data.get("availabilities", {})
         for iso_datetime, status in availabilities.items():
@@ -155,3 +175,97 @@ def _extract_slot_label(slot_id: str, slot_data: dict) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return slot_id
+
+
+def _campsite_matches_preference(
+    campsite_data: dict[str, Any],
+    *,
+    preference: str,
+    rv_length_ft: int | None,
+) -> bool:
+    text = _campsite_text_blob(campsite_data)
+    has_tent_hint = ("tent only" in text) or (" tent " in f" {text} ")
+    has_rv_hint = any(token in text for token in (" rv ", "recreational vehicle", "vehicle length", "trailer"))
+    inferred_rv_length = _extract_rv_length_ft(campsite_data, text)
+
+    if preference == "rv":
+        if rv_length_ft is not None and rv_length_ft > 0:
+            if inferred_rv_length is not None:
+                return inferred_rv_length >= rv_length_ft
+            return has_rv_hint
+        return has_rv_hint or inferred_rv_length is not None
+
+    # Tent preference: include tent/unknown, exclude clearly RV-only sites.
+    if "rv only" in text:
+        return False
+    if has_tent_hint:
+        return True
+    if has_rv_hint and not has_tent_hint:
+        return False
+    return True
+
+
+def _campsite_text_blob(campsite_data: dict[str, Any]) -> str:
+    parts: list[str] = []
+    keys = (
+        "site",
+        "campsite_type",
+        "campsite_type_of_use",
+        "type_of_use",
+        "campsite_reserve_type",
+        "campsite_equipment_name",
+        "loop",
+        "name",
+        "description",
+    )
+    for key in keys:
+        value = campsite_data.get(key)
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip().lower())
+    return " | ".join(parts)
+
+
+def _extract_rv_length_ft(campsite_data: dict[str, Any], text: str) -> int | None:
+    numeric_keys = (
+        "max_vehicle_length",
+        "vehicle_length",
+        "max_rv_length",
+        "rv_length",
+        "vehicle_length_max",
+        "site_length",
+    )
+    numeric_values: list[int] = []
+    for key in numeric_keys:
+        value = campsite_data.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            if value > 0:
+                numeric_values.append(int(value))
+            continue
+        if isinstance(value, str):
+            digits = "".join(ch for ch in value if ch.isdigit())
+            if digits:
+                numeric_values.append(int(digits))
+
+    if numeric_values:
+        return max(numeric_values)
+
+    if not text:
+        return None
+
+    # Prefer lengths that appear near RV/vehicle/trailer hints.
+    tokens = text.replace("|", " ").split()
+    joined = " ".join(tokens)
+    contextual = re.findall(
+        r"(?:rv|vehicle|trailer)[^0-9]{0,20}(\d{1,3})\s*(?:ft|feet|foot)?",
+        joined,
+        flags=re.IGNORECASE,
+    )
+    if contextual:
+        return max(int(v) for v in contextual)
+
+    generic = re.findall(r"(\d{1,3})\s*(?:ft|feet|foot)", joined, flags=re.IGNORECASE)
+    if generic:
+        return max(int(v) for v in generic)
+    return None

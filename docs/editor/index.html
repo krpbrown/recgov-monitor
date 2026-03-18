@@ -84,6 +84,9 @@
           <label>Check-in <input id="checkIn" type="date" /></label>
           <label>Check-out <input id="checkOut" type="date" /></label>
         </div>
+        <div class="grid">
+          <label>Trip title (optional) <input id="tripTitle" placeholder="e.g. Zion trip" /></label>
+        </div>
         <div id="ticketControls" class="grid">
           <label>Search tickets <input id="ticketSearch" placeholder="ticket, park, id" /></label>
           <label>Ticket for this trip
@@ -104,6 +107,17 @@
         </div>
         <div class="row">
           <label><input id="fullMatchesOnly" type="checkbox" /> Full matches only (skip partial-only availability)</label>
+        </div>
+        <div id="sitePreferenceRow" class="grid two">
+          <label>Campsite preference
+            <select id="sitePreference">
+              <option value="tent">Tent (default)</option>
+              <option value="rv">RV</option>
+            </select>
+          </label>
+          <label>RV length (ft)
+            <input id="rvLengthFt" type="number" min="1" step="1" placeholder="e.g. 25" />
+          </label>
         </div>
         <div class="row">
           <button id="newTripBtn">New trip</button>
@@ -133,6 +147,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=19"></script>
+    <script src="../app.js?v=21"></script>
   </body>
 </html>

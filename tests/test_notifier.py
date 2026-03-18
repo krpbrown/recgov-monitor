@@ -271,6 +271,38 @@ def test_notify_converts_numeric_user_id_to_discord_mention() -> None:
     assert content.startswith("<@123456789012345678> Availability found for Simpson Springs Campground (256892)")
 
 
+def test_notify_includes_trip_title_prefix() -> None:
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def post_json(self, url: str, payload: dict) -> None:
+            self.calls.append((url, payload))
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/123456/abcdef")
+    stub = StubClient()
+    notifier.client = stub  # type: ignore[assignment]
+
+    notifier.notify(
+        campground_id="256892",
+        campground_name="Simpson Springs Campground",
+        matches=[
+            AvailabilityMatch(
+                campsite_id="10019342",
+                campsite_name="001",
+                date=date(2026, 3, 5),
+                status="Available",
+            )
+        ],
+        trip_title="Zion trip",
+    )
+
+    assert len(stub.calls) == 1
+    _, payload = stub.calls[0]
+    content = payload["content"]
+    assert content.startswith("[Zion trip] Availability found for Simpson Springs Campground (256892)")
+
+
 def test_notify_ticket_formats_ticket_alert_content() -> None:
     class StubClient:
         def __init__(self) -> None:
@@ -304,3 +336,37 @@ def test_notify_ticket_formats_ticket_alert_content() -> None:
     content = payload["content"]
     assert content.startswith("<@312027909042864130> Ticket availability found for Lehman Caves Tour")
     assert "Date: 6/10/2026 | Slot: 09:00 AM | Remaining: 4" in content
+
+
+def test_notify_ticket_includes_trip_title_prefix() -> None:
+    class StubClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict]] = []
+
+        def post_json(self, url: str, payload: dict) -> None:
+            self.calls.append((url, payload))
+
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/123456/abcdef")
+    stub = StubClient()
+    notifier.client = stub  # type: ignore[assignment]
+
+    notifier.notify_ticket(
+        facility_id="251853",
+        facility_name="Great Basin National Park",
+        ticket_id="10086943",
+        ticket_name="Lehman Caves Tour",
+        matches=[
+            TicketAvailabilityMatch(
+                slot_id="9am",
+                slot_label="09:00 AM",
+                date=date(2026, 6, 10),
+                remaining=4,
+            )
+        ],
+        trip_title="Zion trip",
+    )
+
+    assert len(stub.calls) == 1
+    _, payload = stub.calls[0]
+    content = payload["content"]
+    assert content.startswith("[Zion trip] Ticket availability found for Lehman Caves Tour")

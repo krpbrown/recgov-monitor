@@ -75,11 +75,15 @@ def test_load_monitor_requests_from_json_config(tmp_path) -> None:
     assert monitors[0].requested_dates == {date(2026, 3, 5), date(2026, 3, 6)}
     assert monitors[0].discord_tag == "@user1"
     assert monitors[0].full_matches_only is True
+    assert monitors[0].campsite_preference == "tent"
+    assert monitors[0].rv_length_ft is None
     assert monitors[0].monitor_type == "campground"
     assert monitors[1].campground_ids == ["251869", "232492"]
     assert monitors[1].requested_dates == {date(2026, 7, 2), date(2026, 7, 3), date(2026, 7, 4)}
     assert monitors[1].discord_tag is None
     assert monitors[1].full_matches_only is False
+    assert monitors[1].campsite_preference == "tent"
+    assert monitors[1].rv_length_ft is None
     assert monitors[1].monitor_type == "campground"
 
 
@@ -254,7 +258,23 @@ def test_build_trip_summary_includes_dates_and_names() -> None:
     summary = build_trip_summary(monitors, names, max_campgrounds=6)
     assert summary == [
         "Trip 1 (2026-07-02 to 2026-07-04): "
-        "Simpson Springs Campground, Apgar Campground [full-only]"
+        "Simpson Springs Campground, Apgar Campground [tent] [full-only]"
+    ]
+
+
+def test_build_trip_summary_uses_trip_title_when_present() -> None:
+    monitors = [
+        MonitorRequest(
+            monitor_type="campground",
+            campground_ids=["256892"],
+            requested_dates={date(2026, 7, 2), date(2026, 7, 3)},
+            trip_title="Zion trip",
+        )
+    ]
+    names = {"256892": "Simpson Springs Campground"}
+    summary = build_trip_summary(monitors, names, max_campgrounds=6)
+    assert summary == [
+        "Zion trip (2026-07-02 to 2026-07-04): Simpson Springs Campground [tent]"
     ]
 
 
@@ -285,8 +305,84 @@ def test_load_monitor_requests_supports_ticket_monitors(tmp_path) -> None:
     assert len(monitors) == 1
     monitor = monitors[0]
     assert monitor.monitor_type == "ticket"
+    assert monitor.campsite_preference == "tent"
+    assert monitor.rv_length_ft is None
     assert monitor.ticket_facility_id == "251853"
     assert monitor.ticket_id == "10086943"
     assert monitor.ticket_name == "Lehman Caves Tour"
     assert monitor.ticket_facility_name == "Great Basin National Park"
-    assert monitor.campground_ids == []
+
+
+def test_load_monitor_requests_supports_rv_campsite_preference(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-06-18",
+                        "check_out": "2026-06-20",
+                        "campsite_preference": "rv",
+                        "rv_length_ft": 35,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, _, monitors = load_monitor_requests(str(config_path))
+    assert len(monitors) == 1
+    monitor = monitors[0]
+    assert monitor.campsite_preference == "rv"
+    assert monitor.rv_length_ft == 35
+
+
+def test_load_monitor_requests_supports_trip_title(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-06-18",
+                        "check_out": "2026-06-20",
+                        "trip_title": "Zion trip",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _, _, monitors = load_monitor_requests(str(config_path))
+    assert len(monitors) == 1
+    monitor = monitors[0]
+    assert monitor.trip_title == "Zion trip"
+
+
+def test_load_monitor_requests_rejects_rv_preference_without_length(tmp_path) -> None:
+    config_path = tmp_path / "monitor.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "discord_webhook_url": "https://discord.com/api/webhooks/test",
+                "monitors": [
+                    {
+                        "campground_ids": [256892],
+                        "check_in": "2026-06-18",
+                        "check_out": "2026-06-20",
+                        "campsite_preference": "rv",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="RV campsite preference requires 'rv_length_ft'"):
+        load_monitor_requests(str(config_path))

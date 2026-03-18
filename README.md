@@ -153,9 +153,13 @@ Notes:
 `poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
 Campground names are now loaded from an exported RIDB JSON file (default path: `campgrounds.json`).
 Each monitor entry can optionally include `discord_tag` (recommended: `<@123456789012345678>` user mention, `<@&role_id>` role mention, or numeric user ID), which is prepended to Discord availability alerts for that specific trip group.
+Each monitor entry can optionally include `trip_title` (for example `"Zion trip"`), which is shown in summaries/logs and prefixed in Discord alerts.
 Plain `@username` text may render but often does not generate a real ping from webhooks.
 To get a numeric user ID quickly, type a mention with a leading backslash in Discord (for example `\@kpb17`) and Discord will print the raw mention form (for example `<@312027909042864130>`).
 Each monitor entry can also include optional `full_matches_only` (boolean). When `true`, alerts are sent only when at least one campsite covers all requested nights; partial-only availability is logged but not notified.
+For campground monitors, you can also set optional campsite preference fields:
+- `campsite_preference`: `"tent"` (default) or `"rv"`
+- `rv_length_ft`: required when `campsite_preference` is `"rv"`; RV matches require site max length >= this value.
 For ticketed tours/events, set `"type": "ticket"` with `ticket_facility_id` and `ticket_id` instead of `campground_ids`.
 
 Ticket monitor example:

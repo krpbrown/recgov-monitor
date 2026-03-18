@@ -30,8 +30,11 @@ class MonitorRequest:
     monitor_type: str
     campground_ids: list[str]
     requested_dates: set[date]
+    trip_title: str | None = None
     discord_tag: str | None = None
     full_matches_only: bool = False
+    campsite_preference: str = "tent"
+    rv_length_ft: int | None = None
     ticket_facility_id: str | None = None
     ticket_id: str | None = None
     ticket_name: str | None = None
@@ -95,6 +98,11 @@ def format_requested_date_span(requested_dates: set[date]) -> str:
     return f"{check_in.isoformat()} to {check_out.isoformat()}"
 
 
+def format_trip_label(monitor: MonitorRequest, trip_index: int) -> str:
+    title = (monitor.trip_title or "").strip()
+    return title if title else f"Trip {trip_index}"
+
+
 def looks_like_plain_username_tag(tag: str | None) -> bool:
     if not tag:
         return False
@@ -130,12 +138,13 @@ def build_trip_summary(
 ) -> list[str]:
     summary_lines: list[str] = []
     for trip_index, monitor in enumerate(monitors, start=1):
+        trip_label = format_trip_label(monitor, trip_index)
         date_span = format_requested_date_span(monitor.requested_dates)
         if monitor.monitor_type == "ticket":
             ticket_name = monitor.ticket_name or f"ticket {monitor.ticket_id or 'unknown'}"
             facility_name = monitor.ticket_facility_name or f"facility {monitor.ticket_facility_id or 'unknown'}"
             summary_lines.append(
-                f"Trip {trip_index} ({date_span}): Ticket {ticket_name} at {facility_name}"
+                f"{trip_label} ({date_span}): Ticket {ticket_name} at {facility_name}"
             )
             continue
         names = [
@@ -148,7 +157,13 @@ def build_trip_summary(
         else:
             names_part = ", ".join(names) if names else "(no campgrounds)"
         mode_part = " [full-only]" if monitor.full_matches_only else ""
-        summary_lines.append(f"Trip {trip_index} ({date_span}): {names_part}{mode_part}")
+        site_pref_part = ""
+        if monitor.campsite_preference == "rv":
+            rv_len = monitor.rv_length_ft if monitor.rv_length_ft is not None else "any"
+            site_pref_part = f" [rv >= {rv_len}ft]"
+        else:
+            site_pref_part = " [tent]"
+        summary_lines.append(f"{trip_label} ({date_span}): {names_part}{site_pref_part}{mode_part}")
     return summary_lines
 
 
@@ -393,8 +408,11 @@ def load_monitor_requests(
         campground_ids = item.get("campground_ids")
         check_in = item.get("check_in")
         check_out = item.get("check_out")
+        trip_title_raw = item.get("trip_title")
         discord_tag_raw = item.get("discord_tag")
         full_matches_only_raw = item.get("full_matches_only")
+        campsite_preference_raw = item.get("campsite_preference")
+        rv_length_ft_raw = item.get("rv_length_ft")
         ticket_facility_id_raw = item.get("ticket_facility_id")
         ticket_id_raw = item.get("ticket_id")
         ticket_name_raw = item.get("ticket_name")
@@ -402,14 +420,23 @@ def load_monitor_requests(
 
         if not isinstance(check_in, str) or not isinstance(check_out, str):
             raise ValueError("'check_in' and 'check_out' must be date strings (YYYY-MM-DD).")
+        if trip_title_raw is not None and not isinstance(trip_title_raw, str):
+            raise ValueError("'trip_title' must be a string when provided.")
         if discord_tag_raw is not None and not isinstance(discord_tag_raw, str):
             raise ValueError("'discord_tag' must be a string when provided.")
         if full_matches_only_raw is not None and not isinstance(full_matches_only_raw, bool):
             raise ValueError("'full_matches_only' must be a boolean when provided.")
+        if campsite_preference_raw is not None and not isinstance(campsite_preference_raw, str):
+            raise ValueError("'campsite_preference' must be a string when provided.")
+        if rv_length_ft_raw is not None and (
+            not isinstance(rv_length_ft_raw, int) or rv_length_ft_raw <= 0
+        ):
+            raise ValueError("'rv_length_ft' must be a positive integer when provided.")
         if ticket_name_raw is not None and not isinstance(ticket_name_raw, str):
             raise ValueError("'ticket_name' must be a string when provided.")
         if ticket_facility_name_raw is not None and not isinstance(ticket_facility_name_raw, str):
             raise ValueError("'ticket_facility_name' must be a string when provided.")
+        trip_title = trip_title_raw.strip() if isinstance(trip_title_raw, str) else ""
         discord_tag = discord_tag_raw.strip() if isinstance(discord_tag_raw, str) else ""
         ticket_name = ticket_name_raw.strip() if isinstance(ticket_name_raw, str) else ""
         ticket_facility_name = (
@@ -418,12 +445,26 @@ def load_monitor_requests(
             else ""
         )
         requested_dates = parse_stay_dates(check_in, check_out)
+        campsite_preference = "tent"
+        if isinstance(campsite_preference_raw, str):
+            pref = campsite_preference_raw.strip().lower()
+            if pref:
+                campsite_preference = pref
 
         campground_ids_parsed: list[str] = []
         ticket_facility_id: str | None = None
         ticket_id: str | None = None
+        rv_length_ft: int | None = None
 
         if monitor_type == "campground":
+            if campsite_preference not in {"tent", "rv"}:
+                raise ValueError("'campsite_preference' must be either 'tent' or 'rv'.")
+            if campsite_preference == "rv":
+                if rv_length_ft_raw is None:
+                    raise ValueError(
+                        "RV campsite preference requires 'rv_length_ft'."
+                    )
+                rv_length_ft = rv_length_ft_raw
             if not isinstance(campground_ids, list) or not all(
                 isinstance(v, (str, int)) for v in campground_ids
             ):
@@ -454,8 +495,11 @@ def load_monitor_requests(
                 monitor_type=monitor_type,
                 campground_ids=campground_ids_parsed,
                 requested_dates=requested_dates,
+                trip_title=trip_title or None,
                 discord_tag=discord_tag or None,
                 full_matches_only=bool(full_matches_only_raw),
+                campsite_preference=campsite_preference,
+                rv_length_ft=rv_length_ft,
                 ticket_facility_id=ticket_facility_id,
                 ticket_id=ticket_id,
                 ticket_name=ticket_name or None,
@@ -546,6 +590,7 @@ def run_once(
     error = error_log or (lambda message: print(message, file=sys.stderr))
 
     for trip_index, monitor in enumerate(monitors, start=1):
+        trip_label = format_trip_label(monitor, trip_index)
         date_span = format_requested_date_span(monitor.requested_dates)
         if monitor.monitor_type == "ticket":
             facility_id = monitor.ticket_facility_id or ""
@@ -553,7 +598,7 @@ def run_once(
             ticket_name = monitor.ticket_name or f"ticket {ticket_id}"
             facility_name = monitor.ticket_facility_name or f"facility {facility_id}"
             info(
-                f"Trip {trip_index} ({date_span}) - querying ticket '{ticket_name}' "
+                f"{trip_label} ({date_span}) - querying ticket '{ticket_name}' "
                 f"({ticket_id}) at {facility_name} ({facility_id})"
             )
             ticket_matches = []
@@ -566,7 +611,7 @@ def run_once(
                 found_any = True
                 info(
                     f"Found {len(ticket_matches)} available ticket slot(s) for {ticket_name}. "
-                    f"Trip {trip_index} ({date_span}). Sending Discord alert..."
+                    f"{trip_label} ({date_span}). Sending Discord alert..."
                 )
                 try:
                     notifier.notify_ticket(
@@ -575,6 +620,7 @@ def run_once(
                         ticket_id=ticket_id,
                         ticket_name=ticket_name,
                         matches=ticket_matches,
+                        trip_title=monitor.trip_title,
                         mention=monitor.discord_tag,
                         log_message=discord_log,
                     )
@@ -587,7 +633,7 @@ def run_once(
                     if issue_log is not None:
                         issue_log(message)
             else:
-                info(f"No availability found for {ticket_name}. Trip {trip_index} ({date_span}).")
+                info(f"No availability found for {ticket_name}. {trip_label} ({date_span}).")
             continue
 
         trip_campground_names = [
@@ -595,21 +641,39 @@ def run_once(
             for campground_id in monitor.campground_ids
         ]
         info(
-            f"Trip {trip_index} ({date_span}) - querying "
+            f"{trip_label} ({date_span}) - querying "
             f"{len(trip_campground_names)} campground(s):"
         )
+        if monitor.campsite_preference == "rv":
+            rv_len = monitor.rv_length_ft if monitor.rv_length_ft is not None else "any"
+            info(f"  Site preference: RV (min length {rv_len} ft)")
+        else:
+            info("  Site preference: Tent")
         for campground_name in trip_campground_names:
             info(f"  - {campground_name}")
 
         months = sorted({date(d.year, d.month, 1) for d in monitor.requested_dates})
         for campground_id in monitor.campground_ids:
             all_matches = []
+            raw_matches = []
             campground_name = campground_names.get(campground_id, f"campground {campground_id}")
             for month in months:
                 payload = client.fetch_month(campground_id, month)
                 campground_name = extract_campground_name(payload, campground_name)
+                raw_matches.extend(
+                    find_available_campsites(
+                        payload,
+                        monitor.requested_dates,
+                        campsite_preference="any",
+                    )
+                )
                 all_matches.extend(
-                    find_available_campsites(payload, monitor.requested_dates)
+                    find_available_campsites(
+                        payload,
+                        monitor.requested_dates,
+                        campsite_preference=monitor.campsite_preference,
+                        rv_length_ft=monitor.rv_length_ft,
+                    )
                 )
                 if request_delay_seconds > 0:
                     time.sleep(request_delay_seconds)
@@ -618,20 +682,21 @@ def run_once(
                 full_site_match = has_full_site_match(all_matches, monitor.requested_dates)
                 if monitor.full_matches_only and not full_site_match:
                     info(
-                        f"Partial availability found for {campground_name}, but Trip {trip_index} "
+                        f"Partial availability found for {campground_name}, but {trip_label} "
                         f"({date_span}) is full-matches-only. Skipping Discord alert."
                     )
                     continue
                 found_any = True
                 info(
                     f"Found {len(all_matches)} available campsite slot(s) for {campground_name}. "
-                    f"Trip {trip_index} ({date_span}). Sending Discord alert..."
+                    f"{trip_label} ({date_span}). Sending Discord alert..."
                 )
                 try:
                     notifier.notify(
                         campground_id,
                         campground_name,
                         all_matches,
+                        trip_title=monitor.trip_title,
                         requested_dates=monitor.requested_dates,
                         mention=monitor.discord_tag,
                         log_message=discord_log,
@@ -645,7 +710,19 @@ def run_once(
                     if issue_log is not None:
                         issue_log(message)
             else:
-                info(f"No availability found for {campground_name}. Trip {trip_index} ({date_span}).")
+                if raw_matches:
+                    if monitor.campsite_preference == "rv":
+                        rv_len = monitor.rv_length_ft if monitor.rv_length_ft is not None else "any"
+                        info(
+                            f"Availability found for {campground_name}, but none matched RV length "
+                            f"filter (>= {rv_len} ft). {trip_label} ({date_span})."
+                        )
+                    else:
+                        info(
+                            f"Availability found for {campground_name}, but none matched tent-site "
+                            f"filter. {trip_label} ({date_span})."
+                        )
+                info(f"No availability found for {campground_name}. {trip_label} ({date_span}).")
 
     return 0 if found_any else 1
 
@@ -674,6 +751,7 @@ def main() -> int:
                     monitor_type="campground",
                     campground_ids=parse_campground_ids(args.campground_ids),
                     requested_dates=parse_stay_dates(args.check_in, args.check_out),
+                    campsite_preference="tent",
                 )
             ]
         except ValueError as exc:

@@ -62,3 +62,57 @@ def test_find_available_ticket_slots_parses_bucket_inventory() -> None:
 def test_find_available_ticket_slots_handles_list_payload() -> None:
     matches = find_available_ticket_slots([], "10086943", date(2026, 6, 10))
     assert matches == []
+
+
+def test_find_available_campsites_filters_rv_by_length() -> None:
+    payload = {
+        "campsites": {
+            "1": {
+                "site": "RV 30ft",
+                "campsite_type": "RV (max length 30ft)",
+                "availabilities": {"2026-07-05T00:00:00Z": "Available"},
+            },
+            "2": {
+                "site": "RV 45ft",
+                "campsite_type": "RV (max length 45ft)",
+                "availabilities": {"2026-07-05T00:00:00Z": "Available"},
+            },
+            "3": {
+                "site": "Tent Only",
+                "campsite_type": "Tent only",
+                "availabilities": {"2026-07-05T00:00:00Z": "Available"},
+            },
+        }
+    }
+    matches = find_available_campsites(
+        payload,
+        {date(2026, 7, 5)},
+        campsite_preference="rv",
+        rv_length_ft=35,
+    )
+    assert len(matches) == 1
+    assert matches[0].campsite_id == "2"
+
+
+def test_find_available_campsites_tent_excludes_rv_only() -> None:
+    payload = {
+        "campsites": {
+            "1": {
+                "site": "RV 30ft",
+                "campsite_type": "RV only (max length 30ft)",
+                "availabilities": {"2026-07-05T00:00:00Z": "Available"},
+            },
+            "2": {
+                "site": "Tent Site",
+                "campsite_type": "Tent only",
+                "availabilities": {"2026-07-05T00:00:00Z": "Available"},
+            },
+        }
+    }
+    matches = find_available_campsites(
+        payload,
+        {date(2026, 7, 5)},
+        campsite_preference="tent",
+    )
+    assert len(matches) == 1
+    assert matches[0].campsite_id == "2"

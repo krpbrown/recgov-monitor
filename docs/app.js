@@ -151,8 +151,12 @@ function normalizeTicketsForSave(raw) {
 function normalizeGroup(group) {
   const type = String(group.type || "campground").toLowerCase() === "ticket" ? "ticket" : "campground";
   const ids = Array.from(new Set(group.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)))).sort((a, b) => a - b);
+  const tripTitle = String(group.trip_title || "").trim();
   const discordTag = String(group.discord_tag || "").trim();
   const fullMatchesOnly = !!group.full_matches_only;
+  const campsitePreference = String(group.campsite_preference || "tent").trim().toLowerCase() === "rv" ? "rv" : "tent";
+  const rvLengthRaw = Number(group.rv_length_ft);
+  const rvLengthFt = Number.isInteger(rvLengthRaw) && rvLengthRaw > 0 ? rvLengthRaw : null;
   const ticketFacilityId = String(group.ticket_facility_id || "").trim();
   const ticketId = String(group.ticket_id || "").trim();
   const ticketName = String(group.ticket_name || "").trim();
@@ -162,8 +166,11 @@ function normalizeGroup(group) {
     campground_ids: ids,
     check_in: String(group.check_in || "").trim(),
     check_out: String(group.check_out || "").trim(),
+    trip_title: tripTitle,
     discord_tag: discordTag,
     full_matches_only: fullMatchesOnly,
+    campsite_preference: campsitePreference,
+    rv_length_ft: rvLengthFt,
     ticket_facility_id: ticketFacilityId,
     ticket_id: ticketId,
     ticket_name: ticketName,
@@ -173,7 +180,7 @@ function normalizeGroup(group) {
 
 function groupIdentity(group) {
   const g = normalizeGroup(group);
-  return `${g.type}|${g.check_in}|${g.check_out}|${g.campground_ids.join(",")}|${g.ticket_facility_id}|${g.ticket_id}|${g.discord_tag}|${g.full_matches_only ? 1 : 0}`;
+  return `${g.type}|${g.check_in}|${g.check_out}|${g.trip_title}|${g.campground_ids.join(",")}|${g.ticket_facility_id}|${g.ticket_id}|${g.discord_tag}|${g.full_matches_only ? 1 : 0}|${g.campsite_preference}|${g.rv_length_ft || ""}`;
 }
 
 function shortDate(displayDate) {
@@ -357,6 +364,7 @@ function refreshTripModeUi() {
   const campSection = el("campgroundsSection");
   const ticketControls = el("ticketControls");
   const fullOnlyWrap = el("fullMatchesOnly")?.closest("div.row");
+  const sitePreferenceRow = el("sitePreferenceRow");
   const campEnabled = type === "campground";
   const ticketEnabled = type === "ticket";
   if (campSection) {
@@ -377,6 +385,22 @@ function refreshTripModeUi() {
       node.disabled = !campEnabled;
     });
   }
+  if (sitePreferenceRow) {
+    sitePreferenceRow.classList.toggle("modeInactive", !campEnabled);
+    sitePreferenceRow.querySelectorAll("input, select").forEach((node) => {
+      node.disabled = !campEnabled;
+    });
+  }
+  refreshRvLengthUi();
+}
+
+function refreshRvLengthUi() {
+  const rvLengthNode = el("rvLengthFt");
+  const pref = (el("sitePreference")?.value || "tent").toLowerCase();
+  if (!rvLengthNode) return;
+  const rvEnabled = pref === "rv" && (el("tripType")?.value || "campground") === "campground";
+  rvLengthNode.disabled = !rvEnabled;
+  if (!rvEnabled) rvLengthNode.value = "";
 }
 
 function addDaysToIsoDate(isoDate, days) {
@@ -406,6 +430,7 @@ function refreshTripGroupsList() {
   list.innerHTML = "";
   state.tripGroups.forEach((g, idx) => {
     const group = normalizeGroup(g);
+    const tripLabel = group.trip_title || `Trip ${idx + 1}`;
     let namesText = "(not set)";
     if (group.type === "ticket") {
       const tName = group.ticket_name || `Ticket ${group.ticket_id || ""}`.trim();
@@ -422,8 +447,13 @@ function refreshTripGroupsList() {
     const tagLabel = displayUserFromTag(g.discord_tag);
     const tagPart = tagLabel ? ` | tag: ${tagLabel}` : "";
     const modePart = group.type === "campground" && g.full_matches_only ? " | full-only" : "";
+    const sitePrefPart = group.type === "campground"
+      ? (group.campsite_preference === "rv"
+          ? ` | rv${group.rv_length_ft ? `>=${group.rv_length_ft}ft` : ""}`
+          : " | tent")
+      : "";
     const typePart = group.type === "ticket" ? " | ticket" : "";
-    opt.textContent = `Trip ${idx + 1}: ${rangeText} | ${namesText}${typePart}${tagPart}${modePart}`;
+    opt.textContent = `${tripLabel}: ${rangeText} | ${namesText}${typePart}${tagPart}${sitePrefPart}${modePart}`;
     list.appendChild(opt);
   });
   const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
@@ -436,9 +466,14 @@ function currentGroupFromInputs() {
   const checkOutIso = el("checkOut").value;
   if (!checkInIso || !checkOutIso) return null;
   if (checkOutIso <= checkInIso) return null;
+  const tripTitle = el("tripTitle").value.trim();
   const discordTag = el("discordTag").value.trim();
   const fullMatchesOnly = type === "campground" && !!el("fullMatchesOnly").checked;
+  const campsitePreference = type === "campground" && (el("sitePreference")?.value || "tent").toLowerCase() === "rv" ? "rv" : "tent";
+  const rvLengthRaw = Number(el("rvLengthFt")?.value || "");
+  const rvLengthFt = Number.isInteger(rvLengthRaw) && rvLengthRaw > 0 ? rvLengthRaw : null;
   if (type === "campground" && state.selectedIds.length === 0) return null;
+  if (type === "campground" && campsitePreference === "rv" && rvLengthFt === null) return null;
   if (type === "ticket") {
     const key = el("ticketSelect")?.value || "";
     const ticket = ticketsByKey[key];
@@ -448,8 +483,11 @@ function currentGroupFromInputs() {
       campground_ids: [],
       check_in: currentDisplayDate(checkInIso),
       check_out: currentDisplayDate(checkOutIso),
+      trip_title: tripTitle,
       discord_tag: discordTag,
       full_matches_only: false,
+      campsite_preference: "tent",
+      rv_length_ft: null,
       ticket_facility_id: ticket.ticket_facility_id,
       ticket_id: ticket.ticket_id,
       ticket_name: ticket.ticket_name,
@@ -461,8 +499,11 @@ function currentGroupFromInputs() {
     campground_ids: [...state.selectedIds],
     check_in: currentDisplayDate(checkInIso),
     check_out: currentDisplayDate(checkOutIso),
+    trip_title: tripTitle,
     discord_tag: discordTag,
     full_matches_only: fullMatchesOnly,
+    campsite_preference: campsitePreference,
+    rv_length_ft: campsitePreference === "rv" ? rvLengthFt : null,
   };
 }
 
@@ -485,16 +526,24 @@ function buildMonitorPayloadFromTripGroups(groups, pollSeconds) {
           ...(g.ticket_facility_name ? { ticket_facility_name: g.ticket_facility_name } : {}),
           check_in: checkIn,
           check_out: checkOut,
+          ...(g.trip_title ? { trip_title: g.trip_title } : {}),
           ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
         };
       }
       if (!Array.isArray(g.campground_ids) || g.campground_ids.length === 0) return null;
+      const campsitePreference = String(g.campsite_preference || "tent").toLowerCase() === "rv" ? "rv" : "tent";
+      const rvLengthRaw = Number(g.rv_length_ft);
+      const rvLengthFt = Number.isInteger(rvLengthRaw) && rvLengthRaw > 0 ? rvLengthRaw : null;
+      if (campsitePreference === "rv" && rvLengthFt === null) return null;
       return {
         type: "campground",
         campground_ids: g.campground_ids,
         check_in: checkIn,
         check_out: checkOut,
+        ...(g.trip_title ? { trip_title: g.trip_title } : {}),
         ...(g.discord_tag ? { discord_tag: g.discord_tag } : {}),
+        ...(campsitePreference !== "tent" ? { campsite_preference: campsitePreference } : {}),
+        ...(campsitePreference === "rv" ? { rv_length_ft: rvLengthFt } : {}),
         ...(g.full_matches_only ? { full_matches_only: true } : {}),
       };
     })
@@ -918,8 +967,11 @@ async function onLoad() {
             campground_ids: Array.isArray(m.campground_ids) ? m.campground_ids.map((v) => Number(v)).filter((n) => Number.isInteger(n)) : [],
             check_in: toDisplayDate(m.check_in),
             check_out: toDisplayDate(m.check_out),
+            trip_title: typeof m.trip_title === "string" ? m.trip_title.trim() : "",
             discord_tag: typeof m.discord_tag === "string" ? m.discord_tag.trim() : "",
             full_matches_only: !!m.full_matches_only,
+            campsite_preference: String((m.campsite_preference || "tent")).toLowerCase() === "rv" ? "rv" : "tent",
+            rv_length_ft: Number.isInteger(m.rv_length_ft) && Number(m.rv_length_ft) > 0 ? Number(m.rv_length_ft) : null,
             ticket_facility_id: typeof m.ticket_facility_id === "string" || Number.isInteger(m.ticket_facility_id) ? String(m.ticket_facility_id) : "",
             ticket_id: typeof m.ticket_id === "string" || Number.isInteger(m.ticket_id) ? String(m.ticket_id) : "",
             ticket_name: typeof m.ticket_name === "string" ? m.ticket_name.trim() : "",
@@ -952,8 +1004,11 @@ async function onLoad() {
       el("tripType").value = g.type || "campground";
       el("checkIn").value = isoDateFromDisplay(g.check_in);
       el("checkOut").value = isoDateFromDisplay(g.check_out);
+      el("tripTitle").value = g.trip_title || "";
       el("discordTag").value = g.discord_tag || "";
       el("fullMatchesOnly").checked = !!g.full_matches_only;
+      el("sitePreference").value = g.campsite_preference === "rv" ? "rv" : "tent";
+      el("rvLengthFt").value = g.rv_length_ft ? String(g.rv_length_ft) : "";
       const tKey = g.ticket_facility_id && g.ticket_id ? `${g.ticket_facility_id}:${g.ticket_id}` : "";
       el("ticketSelect").value = ticketsByKey[tKey] ? tKey : "";
       syncTripUserSelectFromDiscordTag(g.discord_tag || "");
@@ -961,8 +1016,11 @@ async function onLoad() {
       el("tripType").value = "campground";
       el("checkIn").value = "";
       el("checkOut").value = "";
+      el("tripTitle").value = "";
       el("discordTag").value = "";
       el("fullMatchesOnly").checked = false;
+      el("sitePreference").value = "tent";
+      el("rvLengthFt").value = "";
       el("ticketSelect").value = "";
       syncTripUserSelectFromDiscordTag("");
     }
@@ -1072,8 +1130,11 @@ function newTripGroup() {
     campground_ids: [],
     check_in: "",
     check_out: "",
+    trip_title: "",
     discord_tag: "",
     full_matches_only: false,
+    campsite_preference: "tent",
+    rv_length_ft: null,
     ticket_facility_id: "",
     ticket_id: "",
     ticket_name: "",
@@ -1084,10 +1145,13 @@ function newTripGroup() {
   el("tripType").value = "campground";
   el("checkIn").value = "";
   el("checkOut").value = "";
+  el("tripTitle").value = "";
   el("ticketSelect").value = "";
   el("ticketSearch").value = "";
   el("discordTag").value = "";
   el("fullMatchesOnly").checked = false;
+  el("sitePreference").value = "tent";
+  el("rvLengthFt").value = "";
   syncTripUserSelectFromDiscordTag("");
   syncCheckoutConstraints();
   refreshTripModeUi();
@@ -1107,10 +1171,13 @@ function loadTripGroup() {
   state.selectedIds = group.type === "ticket" ? [] : [...group.campground_ids];
   el("checkIn").value = isoDateFromDisplay(group.check_in);
   el("checkOut").value = isoDateFromDisplay(group.check_out);
+  el("tripTitle").value = group.trip_title || "";
   const tKey = group.ticket_facility_id && group.ticket_id ? `${group.ticket_facility_id}:${group.ticket_id}` : "";
   el("ticketSelect").value = ticketsByKey[tKey] ? tKey : "";
   el("discordTag").value = group.discord_tag || "";
   el("fullMatchesOnly").checked = !!group.full_matches_only;
+  el("sitePreference").value = group.campsite_preference === "rv" ? "rv" : "tent";
+  el("rvLengthFt").value = group.rv_length_ft ? String(group.rv_length_ft) : "";
   syncCheckoutConstraints();
   syncTripUserSelectFromDiscordTag(group.discord_tag || "");
   refreshTripModeUi();
@@ -1171,6 +1238,11 @@ function bindEvents() {
     refreshTripModeUi();
     autoUpdateActiveTripGroup();
   });
+  bindIfPresent("sitePreference", "change", () => {
+    refreshRvLengthUi();
+    autoUpdateActiveTripGroup();
+  });
+  bindIfPresent("rvLengthFt", "input", autoUpdateActiveTripGroup);
   bindIfPresent("ticketSearch", "input", refreshTicketSelect);
   bindIfPresent("ticketSelect", "change", autoUpdateActiveTripGroup);
   bindIfPresent("checkIn", "change", () => {
@@ -1178,6 +1250,7 @@ function bindEvents() {
     autoUpdateActiveTripGroup();
   });
   bindIfPresent("checkOut", "change", autoUpdateActiveTripGroup);
+  bindIfPresent("tripTitle", "input", autoUpdateActiveTripGroup);
   bindIfPresent("discordTag", "input", () => {
     syncTripUserSelectFromDiscordTag(el("discordTag").value.trim());
     autoUpdateActiveTripGroup();
