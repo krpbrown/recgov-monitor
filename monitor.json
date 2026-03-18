@@ -10,6 +10,7 @@
       ],
       "check_in": "2026-07-02",
       "check_out": "2026-07-05",
+      "trip_title": "Glacier",
       "discord_tag": "312027909042864130",
       "full_matches_only": true
     },
@@ -25,6 +26,7 @@
       ],
       "check_in": "2026-06-23",
       "check_out": "2026-06-27",
+      "trip_title": "Yosemite",
       "discord_tag": "1199842821746725027",
       "full_matches_only": true
     },
@@ -32,10 +34,11 @@
       "type": "ticket",
       "ticket_facility_id": "251853",
       "ticket_id": "10086943",
-      "ticket_name": "Lehman Caves Tour",
-      "ticket_facility_name": "Great Basin National Park",
+      "ticket_name": "Parachute Shield Tour",
+      "ticket_facility_name": "Lehman Caves Tours",
       "check_in": "2026-06-18",
       "check_out": "2026-06-19",
+      "trip_title": "Great Basin Caves",
       "discord_tag": "<@312027909042864130>"
     },
     {
@@ -45,7 +48,10 @@
       ],
       "check_in": "2026-09-13",
       "check_out": "2026-09-15",
+      "trip_title": "Capitol Reef",
       "discord_tag": "<@1482867486847139931>",
+      "campsite_preference": "rv",
+      "rv_length_ft": 22,
       "full_matches_only": true
     },
     {
@@ -56,18 +62,10 @@
       ],
       "check_in": "2026-09-15",
       "check_out": "2026-09-19",
+      "trip_title": "Bryce",
       "discord_tag": "<@1482867486847139931>",
-      "full_matches_only": true
-    },
-    {
-      "type": "campground",
-      "campground_ids": [
-        272266,
-        232445
-      ],
-      "check_in": "2026-09-18",
-      "check_out": "2026-09-22",
-      "discord_tag": "<@1482867486847139931>",
+      "campsite_preference": "rv",
+      "rv_length_ft": 22,
       "full_matches_only": true
     },
     {
@@ -77,7 +75,10 @@
       ],
       "check_in": "2026-09-22",
       "check_out": "2026-09-27",
-      "discord_tag": "<@1482867486847139931>"
+      "trip_title": "Grand Canyon",
+      "discord_tag": "<@1482867486847139931>",
+      "campsite_preference": "rv",
+      "rv_length_ft": 22
     }
   ],
   "poll_seconds": 60
