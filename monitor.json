@@ -53,33 +53,6 @@
       "campsite_preference": "rv",
       "rv_length_ft": 22,
       "full_matches_only": true
-    },
-    {
-      "type": "campground",
-      "campground_ids": [
-        234058,
-        234079
-      ],
-      "check_in": "2026-09-15",
-      "check_out": "2026-09-19",
-      "trip_title": "Bryce",
-      "discord_tag": "<@1482867486847139931>",
-      "campsite_preference": "rv",
-      "rv_length_ft": 22,
-      "full_matches_only": true
-    },
-    {
-      "type": "campground",
-      "campground_ids": [
-        232490
-      ],
-      "check_in": "2026-09-22",
-      "check_out": "2026-09-27",
-      "trip_title": "Grand Canyon",
-      "discord_tag": "<@1482867486847139931>",
-      "campsite_preference": "rv",
-      "rv_length_ft": 22,
-      "full_matches_only": true
     }
   ],
   "poll_seconds": 60
