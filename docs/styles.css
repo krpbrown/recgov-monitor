@@ -24,6 +24,25 @@ body {
   margin-bottom: 14px;
 }
 
+.homeCta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  min-width: 260px;
+  padding: 12px 24px;
+  border-radius: 10px;
+  background: #0f4c81;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.homeCta:hover {
+  background: #0c3c66;
+}
+
 h1, h2, h3 {
   margin: 0 0 10px;
 }
@@ -79,6 +98,10 @@ button:hover {
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
+}
+
+.credentialActions {
+  align-items: center;
 }
 
 .tokenRow {

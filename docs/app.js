@@ -838,6 +838,68 @@ function clearSavedSecrets() {
   status("Cleared saved credentials.");
 }
 
+function setSecretsVisibility(showSecrets) {
+  const mode = showSecrets ? "text" : "password";
+  const tokenNode = el("token");
+  const ridbNode = el("ridbApiKey");
+  if (tokenNode) tokenNode.type = mode;
+  if (ridbNode) ridbNode.type = mode;
+}
+
+async function copySecretValue(fieldId, label) {
+  const node = el(fieldId);
+  const value = node ? node.value.trim() : "";
+  if (!value) {
+    status(`${label} is empty.`);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    status(`${label} copied to clipboard.`);
+  } catch (_err) {
+    if (node && typeof node.focus === "function" && typeof node.select === "function") {
+      node.type = "text";
+      node.focus();
+      node.select();
+      if (!el("showSecrets")?.checked) {
+        setTimeout(() => {
+          setSecretsVisibility(false);
+        }, 1000);
+      }
+      status(`Clipboard unavailable. ${label} selected for manual copy.`);
+      return;
+    }
+    status(`Unable to copy ${label}.`);
+  }
+}
+
+function downloadCredentialsFile() {
+  const tokenNode = el("token");
+  const ridbNode = el("ridbApiKey");
+  const token = tokenNode ? tokenNode.value.trim() : "";
+  const ridbKey = ridbNode ? ridbNode.value.trim() : "";
+  if (!token && !ridbKey) {
+    status("No credentials to export.");
+    return;
+  }
+  const lines = [
+    "# recgov-monitor credentials export",
+    `github_token=${token}`,
+    `ridb_api_key=${ridbKey}`,
+    "",
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "credentials.txt";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  status("Downloaded credentials.txt.");
+}
+
 async function fetchPreviewImageUrl(item) {
   if (state.previewImageCache[item.id] !== undefined) return state.previewImageCache[item.id];
   const ridbNode = el("ridbApiKey");
@@ -1203,6 +1265,12 @@ function bindEvents() {
   bindIfPresent("saveBtn", "click", onSave);
   bindIfPresent("testRidbBtn", "click", testRidbKey);
   bindIfPresent("clearSavedSecretsBtn", "click", clearSavedSecrets);
+  bindIfPresent("copyGithubTokenBtn", "click", () => copySecretValue("token", "GitHub token"));
+  bindIfPresent("copyRidbKeyBtn", "click", () => copySecretValue("ridbApiKey", "RIDB key"));
+  bindIfPresent("downloadCredentialsBtn", "click", downloadCredentialsFile);
+  bindIfPresent("showSecrets", "change", () => {
+    setSecretsVisibility(!!el("showSecrets")?.checked);
+  });
   bindIfPresent("rememberGithubToken", "change", saveSecretsIfEnabled);
   bindIfPresent("rememberRidbKey", "change", saveSecretsIfEnabled);
   bindIfPresent("token", "change", saveSecretsIfEnabled);
@@ -1268,6 +1336,7 @@ function bindEvents() {
     status("Saved credentials found. Loading from GitHub...");
     onLoad();
   }
+  setSecretsVisibility(!!el("showSecrets")?.checked);
 }
 
 bindEvents();
