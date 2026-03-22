@@ -1,7 +1,7 @@
 # recgov-monitor
 
 <p align="center">
-  <a href="https://krpbrown.github.io/recgov-monitor/editor/">
+  <a href="https://krpbrown.github.io/recgov-monitor/docs/editor/">
     <img alt="Open Trip Editor" src="https://img.shields.io/badge/Open%20Trip%20Editor-Click%20Here-0f4c81?style=for-the-badge">
   </a>
 </p>
@@ -86,7 +86,7 @@ Container behavior:
 
 Use the editor at:
 
-- https://krpbrown.github.io/recgov-monitor/editor/
+- https://krpbrown.github.io/recgov-monitor/docs/editor/
 
 Setup (one time):
 
