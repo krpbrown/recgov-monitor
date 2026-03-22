@@ -1,18 +1,37 @@
 # recgov-monitor
 
-`recgov-monitor` checks recreation.gov campground availability for date ranges and sends a Discord webhook notification when campsites are available.
+<p align="center">
+  <a href="https://krpbrown.github.io/recgov-monitor/editor/">
+    <img alt="Open Trip Editor" src="https://img.shields.io/badge/Open%20Trip%20Editor-Click%20Here-0f4c81?style=for-the-badge">
+  </a>
+</p>
 
-## Features
+Monitor Recreation.gov campgrounds and ticketed events, then send Discord alerts when availability appears.
 
-- Query recreation.gov monthly availability API for one or more campgrounds.
-- Query recreation.gov ticket availability for ticketed tours/events.
-- Accept trip dates as check-in and check-out.
-- Support multiple monitor groups through a JSON config file.
-- Optional per-trip `discord_tag` so alerts can mention different users/roles per trip group.
-- Poll every 60 seconds by default.
-- Send formatted notifications to a Discord webhook.
+## Table of Contents
 
-## Install
+- [What It Does](#what-it-does)
+- [Quick Start (Local CLI)](#quick-start-local-cli)
+- [Quick Start (Docker)](#quick-start-docker)
+- [GitHub Pages Web Editor](#github-pages-web-editor)
+- [monitor.json Format](#monitorjson-format)
+- [Tickets Export](#tickets-export)
+- [Discord Tag Format](#discord-tag-format)
+- [Key Environment Variables](#key-environment-variables)
+- [ARM64 / Raspberry Pi](#arm64--raspberry-pi)
+- [Troubleshooting](#troubleshooting)
+
+## What It Does
+
+- Monitors one or more trip groups from `monitor.json`
+- Supports campground trips and ticketed tour/event trips
+- Polls every 60s by default (or your configured interval)
+- Sends Discord alerts to a main webhook
+- Can send hourly health/status logs to a separate webhook
+- Supports per-trip Discord tags (`discord_tag`)
+- Supports campsite preference filtering (`tent` or `rv` with minimum RV length)
+
+## Quick Start (Local CLI)
 
 ```bash
 python -m venv .venv
@@ -20,294 +39,170 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-> `pip install -e .` is what creates the `recgov-monitor` shell command.
-
-## Container
-
-Build a local image:
-
-```bash
-docker build -t recgov-monitor:latest .
-```
-
-Run with baked-in defaults (no CLI args needed):
-
-```bash
-docker run --rm \
-  -e RIDB_API_KEY=your_key_here \
-  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
-  recgov-monitor:latest
-```
-
-Equivalent with Podman:
-
-```bash
-podman build -t recgov-monitor:latest .
-podman run --rm \
-  -e RIDB_API_KEY=your_key_here \
-  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
-  recgov-monitor:latest
-```
-
-Container behavior:
-
-- Starts monitoring immediately.
-- Refreshes `campgrounds.json` daily at local midnight inside the container.
-- Does not refresh on startup by default.
-
-Optional host mounts (to override defaults and persist nightly updates):
-
-```bash
-docker run --rm \
-  -v "$PWD/monitor.json:/data/monitor.json:ro" \
-  -v "$PWD/campgrounds.json:/data/campgrounds.json" \
-  -e RIDB_API_KEY=your_key_here \
-  -e DISCORD_WEBHOOK=https://discord.com/api/webhooks/... \
-  recgov-monitor:latest
-```
-
-Optional environment variables:
-
-- `MONITOR_FILE=/data/monitor.json` path to monitor config (default shown).
-- `CAMPGROUNDS_FILE=/data/campgrounds.json` path to campground catalog (default shown).
-- `AUTO_REFRESH_CAMPGROUNDS=1` enable/disable daily refresh loop (`0` disables).
-- `REFRESH_AT_STARTUP=0` run refresh once during container startup (`1` enables startup refresh).
-- `REFRESH_SKIP_VALIDATION=1` pass `--skip-validation` to refresh job for faster updates.
-- `MONITOR_SYNC_URL=https://raw.githubusercontent.com/<owner>/<repo>/<branch>/monitor.json` enable periodic remote monitor sync.
-- `MONITOR_SYNC_INTERVAL_SECONDS=300` sync interval in seconds.
-- `MONITOR_SYNC_AT_STARTUP=1` pull monitor config immediately on container start.
-- `MONITOR_SYNC_ETAG_FILE=/data/.monitor_sync.etag` path for ETag cache used by conditional sync requests.
-- `GITHUB_TOKEN=<token>` optional auth token for private repo monitor sync URL.
-- `DISCORD_WEBHOOK=https://discord.com/api/webhooks/...` webhook passed via env (recommended).
-- `DISCORD_LOGGER_WEBHOOK=https://discord.com/api/webhooks/...` optional separate webhook for hourly status logs (time, uptime, successful query count, and issue summary for that hour).
-- `TZ=America/Denver` set timezone used for "midnight" scheduling.
-
-### Push to GitHub Packages (GHCR, local)
-
-```bash
-docker login ghcr.io -u <github-username>
-docker build -t ghcr.io/<owner>/<repo>:latest .
-docker push ghcr.io/<owner>/<repo>:latest
-```
-
-Build ARM64 image locally (Raspberry Pi compatible):
-
-```bash
-docker buildx build --platform linux/arm64/v8 -t ghcr.io/<owner>/<repo>:arm64 --push .
-```
-
-### CI Pipeline
-
-- GitHub Actions workflow is provided in `.github/workflows/container-image.yml` and pushes to `ghcr.io/<owner>/<repo>`.
-
-## GitHub Pages Editor
-
-This repo includes a static web editor in `docs/` for editing `monitor.json` in GitHub from a browser.
-
-1. In GitHub: **Settings -> Pages**
-2. Set source to **Deploy from a branch**
-3. Select branch `main` and folder `/docs`
-4. Open the Pages editor URL (for example `https://<owner>.github.io/<repo>/editor/`)
-5. Enter repo/branch/path values and a fine-grained GitHub token
-6. Click **Load from GitHub**, edit trips, then click **Save to GitHub** (saves `monitor.json` and, when configured, `tickets.json` and `users.json`).
-7. Optional: provide `tickets.json` path to manage ticketed tour/event trips in the same editor.
-8. For campground preview images in the editor, provide a RIDB API key in the page field.
-
-Token permissions:
-
-- Repository access: this repo only
-- Permissions: **Contents** read and write
-
-Notes:
-
-- The editor is fully static (runs on GitHub Pages, no backend).
-- If your repo is private, you must use a token to load/save.
-- The Raspberry Pi container can then pull updated `monitor.json` from GitHub.
-
-## Usage
-
-### Config file mode (recommended)
-
-`monitor.json`:
-
-```json
-{
-  "poll_seconds": 60,
-  "monitors": [
-    {
-      "campground_ids": [256892],
-      "check_in": "2026-03-05",
-      "check_out": "2026-03-07",
-      "discord_tag": "@user1",
-      "full_matches_only": true
-    },
-    {
-      "campground_ids": [251869, 232492],
-      "check_in": "2026-07-02",
-      "check_out": "2026-07-05"
-    }
-  ]
-}
-```
-
-`poll_seconds` is optional. If omitted, it defaults to `60`. You can still override this with CLI `--poll-seconds`.
-Campground names are now loaded from an exported RIDB JSON file (default path: `campgrounds.json`).
-Each monitor entry can optionally include `discord_tag` (recommended: `<@123456789012345678>` user mention, `<@&role_id>` role mention, or numeric user ID), which is prepended to Discord availability alerts for that specific trip group.
-Each monitor entry can optionally include `trip_title` (for example `"Zion trip"`), which is shown in summaries/logs and prefixed in Discord alerts.
-Plain `@username` text may render but often does not generate a real ping from webhooks.
-To get a numeric user ID quickly, type a mention with a leading backslash in Discord (for example `\@kpb17`) and Discord will print the raw mention form (for example `<@312027909042864130>`).
-Each monitor entry can also include optional `full_matches_only` (boolean). When `true`, alerts are sent only when at least one campsite covers all requested nights; partial-only availability is logged but not notified.
-For campground monitors, you can also set optional campsite preference fields:
-- `campsite_preference`: `"tent"` (default) or `"rv"`
-- `rv_length_ft`: required when `campsite_preference` is `"rv"`; RV matches require site max length >= this value.
-For ticketed tours/events, set `"type": "ticket"` with `ticket_facility_id` and `ticket_id` instead of `campground_ids`.
-
-Ticket monitor example:
-
-```json
-{
-  "type": "ticket",
-  "ticket_facility_id": 251853,
-  "ticket_id": 10086943,
-  "ticket_name": "Lehman Caves Tour",
-  "ticket_facility_name": "Great Basin National Park",
-  "check_in": "2026-06-10",
-  "check_out": "2026-06-12",
-  "discord_tag": "<@312027909042864130>"
-}
-```
-
-Run:
-
-```bash
-recgov-monitor --config monitor.json
-```
-
-Alternative equivalent invocation:
-
-```bash
-python -m recgov_monitor --config monitor.json
-
-Before running monitor mode, export campgrounds:
+Export campground catalog:
 
 ```bash
 export RIDB_API_KEY=your_key_here
 python scripts/export_campgrounds.py --output campgrounds.json
 ```
 
-By default, export now performs live recreation.gov validation and removes clearly invalid campground IDs
-(for example dead campground links). For quicker test runs, disable this with `--skip-validation` (or `-S`).
-The exported records also include a `park` field (when RIDB park/rec-area metadata is available).
-
-Fast test run example (20 records, force include campground `232492`):
+Run monitor:
 
 ```bash
-export RIDB_API_KEY=your_key_here
-python scripts/export_campgrounds.py -S --test-limit 20 --test-include-id 232492 --output campgrounds.json
+export DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+recgov-monitor --config monitor.json
 ```
 
-Export ticketed tours/events (optional, for ticket monitors):
+## Quick Start (Docker)
+
+Build:
+
+```bash
+docker build -t recgov-monitor:latest .
+```
+
+Run with defaults baked into image (`/data/monitor.json`, `/data/campgrounds.json`):
+
+```bash
+docker run --name recgov-monitor \
+  --restart unless-stopped \
+  -e DISCORD_WEBHOOK=$DISCORD_WEBHOOK \
+  -e DISCORD_LOGGER_WEBHOOK=$DISCORD_LOGGER_WEBHOOK \
+  -e RIDB_API_KEY=$RIDB_API_KEY \
+  -e MONITOR_SYNC_URL="https://raw.githubusercontent.com/<owner>/<repo>/main/monitor.json" \
+  -e MONITOR_SYNC_INTERVAL_SECONDS=300 \
+  -e MONITOR_SYNC_AT_STARTUP=1 \
+  -e TZ="America/Denver" \
+  ghcr.io/<owner>/<repo>:latest
+```
+
+Container behavior:
+
+- Starts polling immediately
+- Refreshes `campgrounds.json` nightly at local midnight
+- Syncs `monitor.json` from `MONITOR_SYNC_URL` at your interval and restarts monitor process when changes are applied
+
+## GitHub Pages Web Editor
+
+Use the editor at:
+
+- https://krpbrown.github.io/recgov-monitor/editor/
+
+Setup (one time):
+
+1. GitHub -> Settings -> Pages
+2. Deploy from branch
+3. Select `main` and `/docs`
+
+Token requirements for load/save:
+
+- Fine-grained PAT scoped to this repo
+- Permissions: `Contents` read/write
+
+The editor can load/save:
+
+- `monitor.json`
+- `tickets.json` (optional)
+- `users.json` (optional)
+
+## monitor.json Format
+
+```json
+{
+  "poll_seconds": 60,
+  "monitors": [
+    {
+      "type": "campground",
+      "trip_title": "Zion trip",
+      "campground_ids": [232490, 232492],
+      "check_in": "2026-09-18",
+      "check_out": "2026-09-22",
+      "discord_tag": "<@312027909042864130>",
+      "full_matches_only": true,
+      "campsite_preference": "rv",
+      "rv_length_ft": 22
+    },
+    {
+      "type": "ticket",
+      "trip_title": "Great Basin Caves",
+      "ticket_facility_id": 251853,
+      "ticket_id": 10086943,
+      "ticket_name": "Lehman Caves Tour",
+      "ticket_facility_name": "Great Basin National Park",
+      "check_in": "2026-06-18",
+      "check_out": "2026-06-19",
+      "discord_tag": "<@312027909042864130>"
+    }
+  ]
+}
+```
+
+Notes:
+
+- `poll_seconds` is optional (defaults to `60`)
+- Campground monitors require `campground_ids`
+- Ticket monitors require `ticket_facility_id` and `ticket_id`
+- `campsite_preference` can be `tent` (default) or `rv`
+- When `campsite_preference` is `rv`, `rv_length_ft` is required
+- `full_matches_only: true` means partial-only matches are logged but not alerted
+
+## Tickets Export
+
+Export all known ticketed items:
 
 ```bash
 python scripts/export_tickets.py --output tickets.json
 ```
 
-The exporter includes `park_name` when Recreation.gov provides a parent park/rec-area for the ticket facility.
-
-Filter tickets to a park/query (examples: `Great Basin`, `Arches`, `10088514`):
+Filter by query (park name, facility name, id, etc.):
 
 ```bash
 python scripts/export_tickets.py --query "Great Basin" --output tickets.json
 ```
 
-To create or update `monitor.json` with a desktop UI:
+## Discord Tag Format
+
+Best format is a real mention:
+
+- User: `<@123456789012345678>`
+- Role: `<@&123456789012345678>`
+
+Numeric user ID alone is also supported and normalized.
+
+Tip: in Discord, type `\@username` to reveal the raw mention form.
+Example: `\@kpb17` -> `<@312027909042864130>`.
+
+## Key Environment Variables
+
+- `DISCORD_WEBHOOK`: main availability webhook
+- `DISCORD_LOGGER_WEBHOOK`: hourly status webhook
+- `DISCORD_LOGGER_MENTION`: optional mention when hourly failures exceed threshold
+- `RIDB_API_KEY`: required for campground export and image previews
+- `MONITOR_SYNC_URL`: raw GitHub URL for remote `monitor.json`
+- `MONITOR_SYNC_INTERVAL_SECONDS`: monitor sync interval (default `300`)
+- `MONITOR_SYNC_AT_STARTUP`: pull config at startup (`1` default)
+- `AUTO_REFRESH_CAMPGROUNDS`: daily campground refresh enabled (`1` default)
+- `REFRESH_AT_STARTUP`: optional startup campground refresh (`0` default)
+- `TZ`: timezone for polling/log timestamps and midnight refresh
+
+## ARM64 / Raspberry Pi
+
+Build/push ARM64 image:
 
 ```bash
-python scripts/monitor_gui.py
+docker buildx build --platform linux/arm64/v8 -t ghcr.io/<owner>/<repo>:latest --push .
 ```
-
-Optional overrides:
-
-```bash
-python scripts/monitor_gui.py --campgrounds-file campgrounds.json --monitor-file monitor.json --ridb-api-key "$RIDB_API_KEY"
-```
-
-The GUI lets you search and select one or more campgrounds, set check-in/check-out dates, and save.
-Search matches campground name, campground ID, and park name.
-When you click a campground, the GUI attempts to load a campground image using RIDB facility media.
-You can create multiple trip groups (each with its own campground set, date range, optional `discord_tag`, and optional `full_matches_only`), and each group is saved as a separate entry in `monitor.json` `monitors`.
-```
-
-### Direct CLI mode (single range)
-
-```bash
-recgov-monitor \
-  --campground-ids 256892,232447 \
-  --check-in 2026-07-05 \
-  --check-out 2026-07-07 \
-  --discord-webhook-url https://discord.com/api/webhooks/...
-```
-
-Alternative equivalent invocation:
-
-```bash
-python -m recgov_monitor \
-  --campground-ids 256892,232447 \
-  --check-in 2026-07-05 \
-  --check-out 2026-07-07 \
-  --discord-webhook-url https://discord.com/api/webhooks/...
-```
-
-The tool polls every 60 seconds by default. You can set this in `monitor.json` (`poll_seconds`) or override with `--poll-seconds`.
-
-To reduce recreation.gov throttling risk, the CLI also supports:
-- `--request-delay-seconds` (default `1.0`) delay between API requests
-- `--rate-limit-cooldown-seconds` (default `300`) cooldown when a 429 is hit
-
-In all modes, `DISCORD_WEBHOOK` can be set as an environment variable instead of passing `--discord-webhook-url`.
-`DISCORD_WEBHOOK_URL` is still accepted as a backward-compatible fallback.
-`DISCORD_LOGGER_WEBHOOK` can be set to send hourly health/status logs to a separate Discord channel.
-You can override the campground catalog path with `--campgrounds-file`.
-
-## Discord Message Format
-
-When availability is found, notifications include campground name, site, status, date, and a reserve link.
-
-Example:
-
-```text
-Availability found for Simpson Springs Campground 256892
-- Site: 001 | Status: Available | Date: 3/5/2026 | Reserve: <https://www.recreation.gov/camping/campsites/10019342>
-```
-
-If only some requested nights are available, Discord alerts are sent as **partial availability** and include
-`Coverage: Partial (x/y nights)` per site.
-
-## Notes
-
-- In one-shot mode (`--poll-seconds 0`), a non-zero exit code means no availability was found.
-- recreation.gov API details may change; this tool currently uses:
-  `GET /api/camps/availability/campground/{campground_id}/month`
 
 ## Troubleshooting
 
-If you see:
-
-```bash
-bash: recgov-monitor: command not found
-```
-
-it means the CLI entrypoint is not installed in your current environment yet. From the repo root:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -e .
-```
-
-Then re-run `recgov-monitor --config monitor.json`.
-
-If you see a Discord webhook error like `403 error code: 1010`, verify you are using the exact webhook URL from Discord channel **Integrations** (it must look like `https://discord.com/api/webhooks/<id>/<token>`), and confirm your network/proxy allows outbound requests to `discord.com`.
-
-If you see `HTTP Error 429: Too Many Requests`, recreation.gov is throttling requests. Increase `--request-delay-seconds` (for example `2` or `3`) and/or increase `--rate-limit-cooldown-seconds` (for example `600`). The app now automatically cools down when it detects 429 responses.
-
+- `recgov-monitor: command not found`:
+  - activate your venv and run `pip install -e .`
+- Discord `403` webhook errors:
+  - verify full webhook URL from channel Integrations
+- Recreation.gov `429`:
+  - increase `--request-delay-seconds`
+  - increase `--rate-limit-cooldown-seconds`
+- Config updates not being picked up in container:
+  - ensure `MONITOR_SYNC_URL` is valid raw URL
+  - ensure `MONITOR_SYNC_INTERVAL_SECONDS` is set
+  - check logs for `[sync] Applied updated monitor config`
