@@ -122,7 +122,7 @@ button:hover {
 }
 
 .rememberBox {
-  height: 38px;
+  min-height: 38px;
   border: 1px solid #c7d2df;
   border-radius: 6px;
   background: #fff;
@@ -130,7 +130,48 @@ button:hover {
   align-items: center;
   padding: 0 10px;
   gap: 8px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.tokenCheck {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.tokenCheck input {
+  width: auto;
+  min-height: auto;
+}
+
+.statusToast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(92vw, 720px);
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #d3dce7;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1f2937;
+  box-shadow: 0 8px 20px rgba(15, 76, 129, 0.12);
+  font-size: 0.95rem;
+  z-index: 1200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease-in-out;
+}
+
+.statusToast.show {
+  opacity: 1;
 }
 
 .fieldWithIndicator {
@@ -222,6 +263,33 @@ button:hover {
   opacity: 0.55;
 }
 
+.fullMatchCard {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7e0eb;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.fullMatchToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fullMatchToggle input {
+  width: auto;
+  min-height: auto;
+}
+
+.fullMatchHint {
+  margin: 6px 0 0;
+  color: #4b5563;
+  font-size: 0.92rem;
+}
+
 #tripGroupsList {
   min-height: 0;
   height: auto;
@@ -297,6 +365,14 @@ button:hover {
 
   .rememberBox {
     width: 100%;
+  }
+
+  .tokenCheck {
+    width: 100%;
+  }
+
+  .fullMatchToggle {
+    align-items: flex-start;
   }
 
   input,

@@ -19,6 +19,7 @@ const state = {
 
 const byId = {};
 const ticketsByKey = {};
+let statusToastTimer = null;
 const STORAGE_KEYS = {
   githubToken: "recgovMonitorGithubToken",
   ridbKey: "recgovMonitorRidbKey",
@@ -28,10 +29,21 @@ const STORAGE_KEYS = {
 };
 
 const el = (id) => document.getElementById(id);
+function showStatusToast(msg) {
+  const toast = el("statusToast");
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add("show");
+  if (statusToastTimer) window.clearTimeout(statusToastTimer);
+  statusToastTimer = window.setTimeout(() => {
+    toast.classList.remove("show");
+    statusToastTimer = null;
+  }, 7000);
+}
 const status = (msg) => {
   const node = el("status");
-  if (!node) return;
-  node.textContent = msg;
+  if (node) node.textContent = msg;
+  showStatusToast(msg);
 };
 const setRidbStatus = (msg, level = "") => {
   const wrap = el("ridbFieldWrap");
@@ -52,9 +64,28 @@ function applyMobileListBehavior() {
   if (!window.matchMedia || !window.matchMedia("(max-width: 900px)").matches) return;
   const tripList = el("tripGroupsList");
   if (tripList) {
-    tripList.setAttribute("multiple", "multiple");
+    tripList.removeAttribute("multiple");
     if (!tripList.hasAttribute("size")) tripList.setAttribute("size", "6");
   }
+}
+
+function installMobileKeyboardDismiss() {
+  if (!window.matchMedia || !window.matchMedia("(max-width: 900px)").matches) return;
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const active = document.activeElement;
+    if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) return;
+    const type = active.type ? active.type.toLowerCase() : "";
+    const activeIsTextLike = active instanceof HTMLTextAreaElement
+      || ["text", "password", "search", "email", "url", "tel", "number", "date"].includes(type);
+    if (!activeIsTextLike) return;
+    const tappedTextInput = target.closest(
+      "input[type='text'],input[type='password'],input[type='search'],input[type='email'],input[type='url'],input[type='tel'],input[type='number'],input[type='date'],textarea"
+    );
+    if (tappedTextInput) return;
+    active.blur();
+  }, true);
 }
 
 function selectedTripGroupIndex() {
@@ -446,6 +477,7 @@ function syncCheckoutConstraints() {
 
 function refreshTripGroupsList() {
   const list = el("tripGroupsList");
+  const meta = el("tripGroupsMeta");
   list.innerHTML = "";
   state.tripGroups.forEach((g, idx) => {
     const group = normalizeGroup(g);
@@ -477,6 +509,24 @@ function refreshTripGroupsList() {
   });
   const dynamicRows = Math.max(2, Math.min(8, state.tripGroups.length || 2));
   list.size = dynamicRows;
+  if (state.tripGroups.length === 0) {
+    state.activeTripIndex = null;
+    if (meta) meta.textContent = "No trips available.";
+    return;
+  }
+  if (!Number.isInteger(state.activeTripIndex) || state.activeTripIndex < 0 || state.activeTripIndex >= state.tripGroups.length) {
+    state.activeTripIndex = 0;
+  }
+  list.value = String(state.activeTripIndex);
+  const selectedGroup = normalizeGroup(state.tripGroups[state.activeTripIndex]);
+  const selectedName = selectedGroup.trip_title || `Trip ${state.activeTripIndex + 1}`;
+  const selectedRange = selectedGroup.check_in && selectedGroup.check_out
+    ? `${selectedGroup.check_in} to ${selectedGroup.check_out}`
+    : "dates not set";
+  if (meta) {
+    const tripWord = state.tripGroups.length === 1 ? "trip" : "trips";
+    meta.textContent = `${state.tripGroups.length} ${tripWord} available. Selected: ${selectedName} (${selectedRange}).`;
+  }
 }
 
 function currentGroupFromInputs() {
@@ -1277,6 +1327,7 @@ function removeTripGroup() {
 
 function bindEvents() {
   applyMobileListBehavior();
+  installMobileKeyboardDismiss();
   loadSavedUsersFromStorage();
   refreshSavedUsersUi();
   refreshTripModeUi();
@@ -1307,6 +1358,12 @@ function bindEvents() {
   bindIfPresent("newTripBtn", "click", newTripGroup);
   bindIfPresent("loadTripBtn", "click", loadTripGroup);
   bindIfPresent("removeTripBtn", "click", removeTripGroup);
+  bindIfPresent("tripGroupsList", "change", () => {
+    const idx = selectedTripGroupIndex();
+    if (!Number.isInteger(idx) || idx < 0 || idx >= state.tripGroups.length) return;
+    state.activeTripIndex = idx;
+    refreshTripGroupsList();
+  });
   bindIfPresent("saveUserBtn", "click", saveOrUpdateUser);
   bindIfPresent("deleteUserBtn", "click", removeSelectedUser);
   bindIfPresent("savedUsersList", "change", () => {

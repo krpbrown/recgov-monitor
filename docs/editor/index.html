@@ -4,9 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>recgov-monitor config editor</title>
-    <link rel="stylesheet" href="../styles.css?v=8" />
+    <link rel="stylesheet" href="../styles.css?v=9" />
   </head>
   <body>
+    <div id="statusToast" class="statusToast" aria-live="polite" role="status"></div>
     <main class="container">
       <h1>recgov-monitor config editor</h1>
 
@@ -34,7 +35,7 @@
             title="Token needs repository Contents: Read/Write for this repo. Token is only used in this browser tab."
           />
           <button id="loadBtn" class="actionBtn">Load from GitHub</button>
-          <label class="rememberBox"><input id="rememberGithubToken" type="checkbox" /> Remember token</label>
+          <label class="tokenCheck"><input id="rememberGithubToken" type="checkbox" /> Remember token</label>
         </div>
         <div class="tokenRow">
           <label class="tokenLabel" for="ridbApiKey">RIDB API key</label>
@@ -43,7 +44,7 @@
             <span id="ridbDot" class="indicatorDot" aria-hidden="true"></span>
           </div>
           <button id="testRidbBtn" type="button" class="actionBtn">Test RIDB key</button>
-          <label class="rememberBox"><input id="rememberRidbKey" type="checkbox" /> Remember key</label>
+          <label class="tokenCheck"><input id="rememberRidbKey" type="checkbox" /> Remember key</label>
         </div>
         <div class="row">
           <button id="clearSavedSecretsBtn" type="button">Clear saved credentials</button>
@@ -52,7 +53,7 @@
           <button id="copyGithubTokenBtn" type="button">Copy GitHub token</button>
           <button id="copyRidbKeyBtn" type="button">Copy RIDB key</button>
           <button id="downloadCredentialsBtn" type="button">Download credentials.txt</button>
-          <label class="rememberBox"><input id="showSecrets" type="checkbox" /> Show credentials</label>
+          <label class="tokenCheck"><input id="showSecrets" type="checkbox" /> Show credentials</label>
         </div>
       </section>
 
@@ -111,8 +112,12 @@
         <div class="grid">
           <label>Discord tag for this trip (optional) <input id="discordTag" placeholder="&lt;@123456789012345678&gt; or numeric user ID" /></label>
         </div>
-        <div class="row">
-          <label><input id="fullMatchesOnly" type="checkbox" /> Full matches only (skip partial-only availability)</label>
+        <div class="fullMatchCard">
+          <label class="fullMatchToggle" for="fullMatchesOnly">
+            <input id="fullMatchesOnly" type="checkbox" />
+            <span>Only alert me when one site can cover all requested nights</span>
+          </label>
+          <p class="fullMatchHint">If unchecked, alerts can include partial-night availability.</p>
         </div>
         <div id="sitePreferenceRow" class="grid two">
           <label>Campsite preference
@@ -130,6 +135,7 @@
           <button id="removeTripBtn">Remove trip</button>
           <button id="loadTripBtn">Load trip</button>
         </div>
+        <p id="tripGroupsMeta" class="hint">No trips available.</p>
         <select id="tripGroupsList" size="2"></select>
       </section>
 
@@ -153,6 +159,6 @@
         </div>
       </section>
     </main>
-    <script src="../app.js?v=23"></script>
+    <script src="../app.js?v=26"></script>
   </body>
 </html>
