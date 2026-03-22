@@ -270,19 +270,61 @@ button:hover {
 }
 
 @media (max-width: 900px) {
+  .container {
+    padding: 12px;
+  }
+
   .grid.two, .grid.three, .grid.four {
     grid-template-columns: 1fr;
   }
+
   .lists {
     grid-template-columns: 1fr;
   }
+
   .listButtons {
     flex-direction: row;
   }
+
+  .listButtons button {
+    flex: 1;
+    min-height: 44px;
+  }
+
   .tokenRow {
     grid-template-columns: 1fr;
   }
+
   .rememberBox {
+    width: 100%;
+  }
+
+  input,
+  select,
+  button {
+    min-height: 44px;
+  }
+
+  .campSelect {
+    min-height: 34vh;
+    height: 34vh;
+  }
+
+  #tripGroupsList {
+    min-height: 180px;
+  }
+
+  .actionCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .submitRow {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .submitRow button {
     width: 100%;
   }
 }

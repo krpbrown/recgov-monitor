@@ -48,6 +48,25 @@ const bindIfPresent = (id, eventName, handler) => {
   node.addEventListener(eventName, handler);
 };
 
+function applyMobileListBehavior() {
+  if (!window.matchMedia || !window.matchMedia("(max-width: 900px)").matches) return;
+  const tripList = el("tripGroupsList");
+  if (tripList) {
+    tripList.setAttribute("multiple", "multiple");
+    if (!tripList.hasAttribute("size")) tripList.setAttribute("size", "6");
+  }
+}
+
+function selectedTripGroupIndex() {
+  const list = el("tripGroupsList");
+  if (!list) return -1;
+  const selected = selectedValues(list);
+  if (selected.length > 0) return selected[0];
+  const direct = Number(list.value);
+  if (Number.isInteger(direct)) return direct;
+  return -1;
+}
+
 function githubApiBase() {
   const owner = el("owner").value.trim();
   const repo = el("repo").value.trim();
@@ -1225,7 +1244,7 @@ function newTripGroup() {
 }
 
 function loadTripGroup() {
-  const idx = Number(el("tripGroupsList").value);
+  const idx = selectedTripGroupIndex();
   if (!Number.isInteger(idx) || idx < 0 || idx >= state.tripGroups.length) return;
   state.activeTripIndex = idx;
   const group = state.tripGroups[idx];
@@ -1248,7 +1267,7 @@ function loadTripGroup() {
 }
 
 function removeTripGroup() {
-  const idx = Number(el("tripGroupsList").value);
+  const idx = selectedTripGroupIndex();
   if (!Number.isInteger(idx) || idx < 0 || idx >= state.tripGroups.length) return;
   state.tripGroups.splice(idx, 1);
   state.activeTripIndex = null;
@@ -1257,6 +1276,7 @@ function removeTripGroup() {
 }
 
 function bindEvents() {
+  applyMobileListBehavior();
   loadSavedUsersFromStorage();
   refreshSavedUsersUi();
   refreshTripModeUi();
