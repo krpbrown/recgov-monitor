@@ -14,6 +14,7 @@ Monitor Recreation.gov campgrounds and ticketed events, then send Discord alerts
 - [Quick Start (Local CLI)](#quick-start-local-cli)
 - [Quick Start (Docker)](#quick-start-docker)
 - [GitHub Pages Web Editor](#github-pages-web-editor)
+- [Get API Keys](#get-api-keys)
 - [monitor.json Format](#monitorjson-format)
 - [Tickets Export](#tickets-export)
 - [Discord Tag Format](#discord-tag-format)
@@ -104,6 +105,35 @@ The editor can load/save:
 - `monitor.json`
 - `tickets.json` (optional)
 - `users.json` (optional)
+
+## Get API Keys
+
+### RIDB API Key
+
+1. Open https://ridb.recreation.gov/landing
+2. Sign in (or create an account).
+3. Create/generate an API key from your RIDB account dashboard.
+4. Copy the key and set it as:
+
+```bash
+export RIDB_API_KEY=your_ridb_key_here
+```
+
+### GitHub Token (for web editor load/save)
+
+Use a fine-grained Personal Access Token (PAT):
+
+1. GitHub -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
+2. Create a new token scoped to your `recgov-monitor` repo.
+3. Grant repository permission:
+   - `Contents`: Read and write
+4. Copy the token and paste it into the web editor GitHub token field.
+
+Optional for CLI/container sync from private repos:
+
+```bash
+export GITHUB_TOKEN=your_github_token_here
+```
 
 ## monitor.json Format
 
