@@ -3,20 +3,6 @@
     {
       "type": "campground",
       "campground_ids": [
-        251869,
-        258796,
-        10363618,
-        258795
-      ],
-      "check_in": "2026-07-02",
-      "check_out": "2026-07-05",
-      "trip_title": "Glacier",
-      "discord_tag": "312027909042864130",
-      "full_matches_only": true
-    },
-    {
-      "type": "campground",
-      "campground_ids": [
         232447,
         232450,
         232449,
@@ -40,19 +26,6 @@
       "check_out": "2026-06-19",
       "trip_title": "Great Basin Caves",
       "discord_tag": "<@312027909042864130>"
-    },
-    {
-      "type": "campground",
-      "campground_ids": [
-        272245
-      ],
-      "check_in": "2026-09-13",
-      "check_out": "2026-09-15",
-      "trip_title": "Capitol Reef",
-      "discord_tag": "<@1482867486847139931>",
-      "campsite_preference": "rv",
-      "rv_length_ft": 22,
-      "full_matches_only": true
     }
   ],
   "poll_seconds": 60
