@@ -186,14 +186,19 @@ def _campsite_matches_preference(
     text = _campsite_text_blob(campsite_data)
     has_tent_hint = ("tent only" in text) or (" tent " in f" {text} ")
     has_rv_hint = any(token in text for token in (" rv ", "recreational vehicle", "vehicle length", "trailer"))
+    clearly_non_vehicle = _is_clearly_non_vehicle_site(text)
     inferred_rv_length = _extract_rv_length_ft(campsite_data, text)
 
     if preference == "rv":
         if rv_length_ft is not None and rv_length_ft > 0:
             if inferred_rv_length is not None:
                 return inferred_rv_length >= rv_length_ft
-            return has_rv_hint
-        return has_rv_hint or inferred_rv_length is not None
+            if has_rv_hint:
+                return True
+            # recreation.gov month payloads can omit RV metadata for standard
+            # drive-up sites. Keep clearly non-vehicle sites excluded.
+            return not clearly_non_vehicle
+        return has_rv_hint or inferred_rv_length is not None or not clearly_non_vehicle
 
     # Tent preference: include tent/unknown, exclude clearly RV-only sites.
     if "rv only" in text:
@@ -269,3 +274,26 @@ def _extract_rv_length_ft(campsite_data: dict[str, Any], text: str) -> int | Non
     if generic:
         return max(int(v) for v in generic)
     return None
+
+
+def _is_clearly_non_vehicle_site(text: str) -> bool:
+    if not text:
+        return False
+    non_vehicle_tokens = (
+        "tent only",
+        "walk to",
+        "walk-in",
+        "walk in",
+        "hike-to",
+        "hike to",
+        "hike-in",
+        "hike in",
+        "boat-in",
+        "boat in",
+        "paddle-in",
+        "paddle in",
+        "pack-in",
+        "pack in",
+        "backpacking",
+    )
+    return any(token in text for token in non_vehicle_tokens)

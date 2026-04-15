@@ -94,6 +94,32 @@ def test_find_available_campsites_filters_rv_by_length() -> None:
     assert matches[0].campsite_id == "2"
 
 
+def test_find_available_campsites_rv_includes_standard_when_metadata_missing() -> None:
+    payload = {
+        "campsites": {
+            "103526": {
+                "site": "067",
+                "campsite_type": "STANDARD NONELECTRIC",
+                "type_of_use": "Overnight",
+                "availabilities": {"2026-09-13T00:00:00Z": "Available"},
+            },
+            "88": {
+                "site": "Tent Site",
+                "campsite_type": "Tent only walk-in",
+                "availabilities": {"2026-09-13T00:00:00Z": "Available"},
+            },
+        }
+    }
+    matches = find_available_campsites(
+        payload,
+        {date(2026, 9, 13)},
+        campsite_preference="rv",
+        rv_length_ft=22,
+    )
+    assert len(matches) == 1
+    assert matches[0].campsite_id == "103526"
+
+
 def test_find_available_campsites_tent_excludes_rv_only() -> None:
     payload = {
         "campsites": {
