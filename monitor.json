@@ -3,29 +3,10 @@
     {
       "type": "campground",
       "campground_ids": [
-        232447,
-        232450,
-        232449,
-        232453,
-        10083845,
-        232452
+        251869
       ],
-      "check_in": "2026-06-23",
-      "check_out": "2026-06-27",
-      "trip_title": "Yosemite",
-      "discord_tag": "1199842821746725027",
-      "full_matches_only": true
-    },
-    {
-      "type": "ticket",
-      "ticket_facility_id": "251853",
-      "ticket_id": "10086943",
-      "ticket_name": "Parachute Shield Tour",
-      "ticket_facility_name": "Lehman Caves Tours",
-      "check_in": "2026-06-18",
-      "check_out": "2026-06-19",
-      "trip_title": "Great Basin Caves",
-      "discord_tag": "<@312027909042864130>"
+      "check_in": "2026-07-01",
+      "check_out": "2026-07-02"
     }
   ],
   "poll_seconds": 60
